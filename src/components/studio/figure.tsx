@@ -1807,6 +1807,7 @@ function FittedFigure({
       eyeOpenR: s.eyeOpenR,
       blinkRate: s.blinkRate,
       blinkSpeed: s.blinkSpeed,
+      mouthOpen: s.mouthOpen,
     });
     applyNavelMorph(setup.navelMorph, s.navelDepth, s.navelDiameter);
     gutExc.current += (0 - gutExc.current) * (1 - Math.exp(-0.42 * dt));

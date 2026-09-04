@@ -118,6 +118,8 @@ export function Overlay() {
   const blinkSpeed = useStudio((s) => s.blinkSpeed);
   const setBlinkRate = useStudio((s) => s.setBlinkRate);
   const setBlinkSpeed = useStudio((s) => s.setBlinkSpeed);
+  const mouthOpen = useStudio((s) => s.mouthOpen);
+  const setMouthOpen = useStudio((s) => s.setMouthOpen);
   const grabbing = useStudio((s) => s.grabbing);
   const loading = useStudio((s) => s.loading);
   const loadProgress = useStudio((s) => s.loadProgress);
@@ -949,6 +951,30 @@ export function Overlay() {
               </label>
               <p className="mt-1.5 text-xs leading-relaxed text-muted">
                 左右眼可单独闭。滑块 1 全睁，0 全闭。眨眼频率和速度在设置里调。
+              </p>
+              <label className="mt-3 block">
+                <span className="mb-1.5 flex items-center justify-between text-xs text-muted">
+                  <span>张嘴</span>
+                  <span className="tabular-nums text-fg">{mouthOpen.toFixed(2)}</span>
+                </span>
+                <Slider.Root
+                  value={[mouthOpen]}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onValueChange={([v]) => {
+                    if (typeof v === "number") setMouthOpen(v);
+                  }}
+                  className="relative flex h-5 w-full touch-none items-center"
+                >
+                  <Slider.Track className="relative h-1 grow rounded-full bg-surface-2">
+                    <Slider.Range className="absolute h-full rounded-full bg-accent" />
+                  </Slider.Track>
+                  <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
+                </Slider.Root>
+              </label>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                下巴下颌带动下唇、下牙和舌头，上唇轻微上提。
               </p>
               <p className="mt-4 mb-1.5 text-xs text-muted">表情</p>
               <div className="grid grid-cols-4 gap-1">

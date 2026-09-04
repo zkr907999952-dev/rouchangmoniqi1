@@ -277,6 +277,7 @@ type StudioState = StudioParams & {
   eyeOpenR: number;
   blinkRate: number;
   blinkSpeed: number;
+  mouthOpen: number;
   setParam: <K extends keyof StudioParams>(key: K, value: StudioParams[K]) => void;
   applyPreset: (id: PresetId) => void;
   setInteractMode: (mode: InteractMode) => void;
@@ -297,6 +298,7 @@ type StudioState = StudioParams & {
   setEyeOpenR: (v: number) => void;
   setBlinkRate: (v: number) => void;
   setBlinkSpeed: (v: number) => void;
+  setMouthOpen: (v: number) => void;
   shake: () => void;
   fireStrike: (point?: [number, number, number] | null) => void;
   resetSim: () => void;
@@ -334,6 +336,7 @@ export const useStudio = create<StudioState>((set) => ({
   eyeOpenR: 1,
   blinkRate: 38,
   blinkSpeed: 1,
+  mouthOpen: 0,
   setParam: (key, value) =>
     set((s) => ({
       ...s,
@@ -404,6 +407,7 @@ export const useStudio = create<StudioState>((set) => ({
   setEyeOpenR: (eyeOpenR) => set({ eyeOpenR: Math.max(0, Math.min(1, eyeOpenR)) }),
   setBlinkRate: (blinkRate) => set({ blinkRate: Math.max(4, Math.min(40, blinkRate)) }),
   setBlinkSpeed: (blinkSpeed) => set({ blinkSpeed: Math.max(0, Math.min(1, blinkSpeed)) }),
+  setMouthOpen: (mouthOpen) => set({ mouthOpen: Math.max(0, Math.min(1, mouthOpen)) }),
   shake: () => set((s) => ({ shakeNonce: s.shakeNonce + 1 })),
   fireStrike: (point = null) =>
     set((s) => ({ strikeNonce: s.strikeNonce + 1, strikePoint: point ?? null })),

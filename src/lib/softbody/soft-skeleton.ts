@@ -35,6 +35,7 @@ export type SkelParams = {
   eyeOpenR: number;
   blinkRate: number;
   blinkSpeed: number;
+  mouthOpen: number;
 };
 
 export type ExpressionId = "rest" | "smile" | "surprise" | "open";
@@ -193,6 +194,11 @@ export class SoftSkeleton {
   private eyeOpenR = 1;
   private blinkRate = 38;
   private blinkSpeed = 1;
+  private mouthOpen = 0;
+  private mouthU = 0;
+  private readonly mouthKind: Int8Array;
+  private readonly mouthQ: THREE.Quaternion[] = [];
+  private readonly mouthOff: THREE.Vector3[] = [];
   private readonly brL = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly brR = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly bindings: SkinBinding[] = [];
@@ -280,6 +286,36 @@ export class SoftSkeleton {
       const w = letter === "C" ? 1 : letter === "B" ? 0.92 : letter === "D" ? 0.8 : letter === "A" ? 0.66 : 0.52;
       this.lidW[i] = w;
       this.lidKind[i] = m[2] === "U" ? 1 : -1;
+    }
+    this.mouthKind = new Int8Array(this.count);
+    const faceI = this.iFace >= 0 ? this.iFace : 0;
+    const hy = this.rest[faceI * 3 + 1]! - 0.01;
+    const hz = this.rest[faceI * 3 + 2]! + 0.006;
+    const jawT = 0.16;
+    for (let i = 0; i < this.count; i++) {
+      this.mouthQ.push(new THREE.Quaternion());
+      this.mouthOff.push(new THREE.Vector3());
+      const nm = this.names[i]!;
+      let w = 0;
+      if (nm === "C_Chin" || /Dteeth/.test(nm)) w = 1;
+      else if (/Tongroot/.test(nm)) w = 0.78;
+      else if (/Tongtip/.test(nm)) w = 0.62;
+      else if (nm === "C_Dlip" || nm === "C_Dlipin") w = 0.94;
+      else if (nm === "C_Dlipout") w = 0.88;
+      else if (/^(L|R)_Dlip_A$/.test(nm)) w = 0.9;
+      else if (/^(L|R)_Dlip/.test(nm)) w = 0.82;
+      else if (nm === "C_Ulip") w = -0.03;
+      else if (nm === "C_Ulipout" || /^(L|R)_Ulip_A$/.test(nm)) w = -0.018;
+      if (!w) continue;
+      this.mouthKind[i] = 1;
+      const y = this.rest[i * 3 + 1]!;
+      const z = this.rest[i * 3 + 2]!;
+      const dy = y - hy;
+      const dz = z - hz;
+      const th = jawT * w;
+      const c = Math.cos(th);
+      const s = Math.sin(th);
+      this.mouthOff[i]!.set(0, hy + dy * c - dz * s - y, hz + dy * s + dz * c - z);
     }
     for (let i = 0; i < this.count; i++) {
       if (this.group[i] !== "hair") continue;
@@ -1142,6 +1178,10 @@ export class SoftSkeleton {
     this.eyeOpenR = THREE.MathUtils.clamp(params.eyeOpenR, 0, 1);
     this.blinkRate = THREE.MathUtils.clamp(params.blinkRate, 4, 40);
     this.blinkSpeed = THREE.MathUtils.clamp(params.blinkSpeed, 0, 1);
+    this.mouthOpen = THREE.MathUtils.clamp(params.mouthOpen, 0, 1);
+    const mouthT = this.mouthOpen * this.mouthOpen * (3 - 2 * this.mouthOpen);
+    this.mouthU += (mouthT - this.mouthU) * (1 - Math.exp(-9 * d));
+    if (this.mouthU < 0.0008) this.mouthU = 0;
     this.updateGaze(d);
     this.updateBlink(d);
     this.closeAmtL = THREE.MathUtils.clamp(1 - this.eyeOpenL * (1 - this.blinkAmt), 0, 1);
@@ -1181,6 +1221,11 @@ export class SoftSkeleton {
         continue;
       }
       let targetQ = isFace && this.expression !== "rest" ? this.exprQ[i]! : this.poseQ[i]!;
+      if (!locked && this.mouthU > 0.001 && this.mouthKind[i]) {
+        _q.slerpQuaternions(IDENTITY, this.mouthQ[i]!, this.mouthU);
+        _q2.copy(targetQ).multiply(_q);
+        targetQ = _q2;
+      }
       if (!locked && (this.gazeEyeBlend > 0.01 || this.gazeNeckBlend > 0.01 || gb > 0.01)) {
         if (i === this.iNeck) {
           _q2.copy(this.poseQ[i]!).slerp(this.gazeNeckQ, this.gazeNeckBlend);
@@ -1204,6 +1249,11 @@ export class SoftSkeleton {
       ) {
         const k = i === this.iEyeL || i === this.iEyeR ? 22 : i === this.iHead ? 7.2 : 3.4;
         q.slerp(targetQ, 1 - Math.exp(-k * d));
+        qv.set(0, 0, 0);
+        continue;
+      }
+      if (!locked && this.mouthKind[i]) {
+        q.slerp(targetQ, 1 - Math.exp(-16 * d));
         qv.set(0, 0, 0);
         continue;
       }
@@ -1696,9 +1746,9 @@ export class SoftSkeleton {
   private updateFK() {
     for (let i = 0; i < this.count; i++) {
       const p = this.parent[i];
-      const ox = this.exprOff[i]!.x + this.off[i]!.x;
-      const oy = this.exprOff[i]!.y + this.off[i]!.y;
-      const oz = this.exprOff[i]!.z + this.off[i]!.z;
+      const ox = this.exprOff[i]!.x + this.off[i]!.x + this.mouthOff[i]!.x * this.mouthU;
+      const oy = this.exprOff[i]!.y + this.off[i]!.y + this.mouthOff[i]!.y * this.mouthU;
+      const oz = this.exprOff[i]!.z + this.off[i]!.z + this.mouthOff[i]!.z * this.mouthU;
       if (p < 0) {
         this.wrot[i]!.copy(this.q[i]!);
         this.wpos[i]!.set(this.rest[i * 3]! + ox, this.rest[i * 3 + 1]! + oy, this.rest[i * 3 + 2]! + oz);
