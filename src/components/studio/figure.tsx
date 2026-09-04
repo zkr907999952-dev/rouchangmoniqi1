@@ -967,6 +967,19 @@ function inflateGuts(root: THREE.Object3D, navel: THREE.Vector3, inf: number) {
   });
 }
 
+function polishFront(mesh: THREE.Mesh, closer: boolean) {
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  for (const raw of mats) {
+    const m = raw as THREE.MeshStandardMaterial;
+    if (!m) continue;
+    m.side = THREE.FrontSide;
+    m.polygonOffset = false;
+    m.dithering = false;
+    m.needsUpdate = true;
+  }
+  mesh.renderOrder = closer ? 3 : 2;
+}
+
 function polishHair(mesh: THREE.Mesh) {
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   const next = mats.map((raw) => {
@@ -974,26 +987,35 @@ function polishHair(mesh: THREE.Mesh) {
     const m = (src ? src.clone() : new THREE.MeshStandardMaterial()) as THREE.MeshStandardMaterial;
     m.vertexColors = false;
     m.side = THREE.DoubleSide;
+    m.forceSinglePass = true;
     m.transparent = false;
     m.opacity = 1;
     m.alphaHash = false;
-    m.alphaTest = 0.4;
+    m.alphaToCoverage = false;
+    m.alphaTest = 0.38;
     m.depthWrite = true;
     m.depthTest = true;
     m.metalness = 0;
-    m.roughness = THREE.MathUtils.clamp(m.roughness || 0.5, 0.42, 0.62);
+    m.roughness = 0.58;
     m.dithering = false;
-    m.envMapIntensity = 0.35;
+    m.envMapIntensity = 0.2;
+    m.polygonOffset = false;
+    m.normalMap = null;
+    m.roughnessMap = null;
+    m.metalnessMap = null;
+    m.aoMap = null;
     if (m.map) {
       m.map.colorSpace = THREE.SRGBColorSpace;
-      m.map.anisotropy = 4;
+      m.map.anisotropy = 1;
+      m.map.generateMipmaps = true;
+      m.map.minFilter = THREE.LinearMipmapLinearFilter;
+      m.map.magFilter = THREE.LinearFilter;
     }
-    if (m.normalMap) m.normalScale.set(0.55, 0.55);
     m.needsUpdate = true;
     return m;
   });
   mesh.material = next.length === 1 ? next[0]! : next;
-  mesh.renderOrder = 3;
+  mesh.renderOrder = 4;
 }
 
 function polishOrgans(root: THREE.Object3D, kind: "gut" | "pelvis") {
@@ -1267,9 +1289,10 @@ function FittedFigure({
       }
       pos.array.set(world);
       pos.needsUpdate = true;
+      const hintName = hint ?? bindHint(mesh);
       const nrmAttr = geo.getAttribute("normal") as THREE.BufferAttribute | undefined;
-      const nmat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-      if (nrmAttr && nrmAttr.array instanceof Float32Array) {
+      if (hintName !== "hair" && nrmAttr && nrmAttr.array instanceof Float32Array) {
+        const nmat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
         for (let i = 0; i < n; i++) {
           _normal.fromBufferAttribute(nrmAttr, i).applyMatrix3(nmat).normalize();
           nrmAttr.array[i * 3] = _normal.x;
@@ -1278,15 +1301,40 @@ function FittedFigure({
         }
         nrmAttr.needsUpdate = true;
       }
-      const hintName = hint ?? bindHint(mesh);
+      const tanAttr = geo.getAttribute("tangent") as THREE.BufferAttribute | undefined;
+      if (hintName !== "hair" && tanAttr && tanAttr.array instanceof Float32Array) {
+        const step = tanAttr.itemSize;
+        for (let i = 0; i < n; i++) {
+          _normal.fromBufferAttribute(tanAttr, i).transformDirection(mesh.matrixWorld).normalize();
+          tanAttr.array[i * step] = _normal.x;
+          tanAttr.array[i * step + 1] = _normal.y;
+          tanAttr.array[i * step + 2] = _normal.z;
+        }
+        tanAttr.needsUpdate = true;
+      }
+      if ((hintName === "body" || hintName === "dress" || hintName === "legs") && landmarks.head) {
+        const seam = landmarks.head.y - 0.1;
+        for (let i = 0; i < n; i++) {
+          const y = pos.array[i * 3 + 1]!;
+          if (y <= seam) continue;
+          const t = THREE.MathUtils.clamp((y - seam) / 0.07, 0, 1);
+          pos.array[i * 3] *= 1 - 0.055 * t;
+          pos.array[i * 3 + 2] = pos.array[i * 3 + 2]! * (1 - 0.04 * t) - 0.007 * t;
+        }
+        pos.needsUpdate = true;
+      }
       const pack = nudeMapFor(meshMatKey(mesh), n);
       const tri = geo.getIndex()?.array as Uint16Array | Uint32Array | undefined;
-      const nrmArr = nrmAttr?.array instanceof Float32Array ? nrmAttr.array : undefined;
+      const nrmArr =
+        hintName !== "hair" && nrmAttr?.array instanceof Float32Array ? nrmAttr.array : undefined;
+      const tanArr =
+        hintName !== "hair" && tanAttr?.array instanceof Float32Array ? tanAttr.array : undefined;
       const binding =
         pack && pack.count === n
-          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri, nrmArr)
-          : skeleton.bind(pos.array, hintName, tri, nrmArr);
-      geo.setAttribute("color", new THREE.BufferAttribute(binding.colors, 3));
+          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri, nrmArr, tanArr)
+          : skeleton.bind(pos.array, hintName, tri, nrmArr, tanArr);
+      if (hintName !== "hair") geo.setAttribute("color", new THREE.BufferAttribute(binding.colors, 3));
+      if (hintName === "hair") geo.userData.hair = true;
       boundGeos.push(geo);
       if (!hint && isTorsoMesh(mesh)) torsoBinds.push(binding);
       const weightMat = new THREE.MeshLambertMaterial({
@@ -1295,9 +1343,14 @@ function FittedFigure({
       });
       weightViews.push({ mesh, orig: mesh.material, weight: weightMat });
       if (hintName === "hair") polishHair(mesh);
-      else if (!hint) {
+      else if (hintName === "eye") {
+        mesh.renderOrder = 1;
+      } else if (hintName === "mouth") {
         mesh.renderOrder = 2;
+      } else {
+        polishFront(mesh, hintName === "face");
       }
+      mesh.frustumCulled = false;
     };
 
     body.traverse((obj) => {
@@ -1571,8 +1624,6 @@ function FittedFigure({
     for (const geo of setup.boundGeos) {
       const pos = geo.getAttribute("position");
       if (pos) pos.needsUpdate = true;
-      const nrm = geo.getAttribute("normal");
-      if (nrm) nrm.needsUpdate = true;
     }
   };
 

@@ -67,6 +67,7 @@ export type SkinBinding = {
   delta: Float32Array;
   dprev: Float32Array;
   hair?: boolean;
+  lash?: Uint8Array;
   normals?: Float32Array;
   restN?: Float32Array;
   tangents?: Float32Array;
@@ -202,6 +203,7 @@ export class SoftSkeleton {
   private breathT = 0;
   private readonly hairDepth: Float32Array;
   private readonly hairIds: number[] = [];
+  private hairLash: Uint8Array | undefined;
   private readonly hairP: THREE.Vector3[] = [];
   private readonly hairPrev: THREE.Vector3[] = [];
   private hairLen = new Float32Array(0);
@@ -410,7 +412,7 @@ export class SoftSkeleton {
       softness[i] = Math.min(1, soft);
     }
     if (hint === "hair") this.reskinHair(index, weight, rest, softness, n, tris);
-    const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair" };
+    const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair", lash: hint === "hair" ? this.hairLash : undefined };
     this.attachFrame(binding, n, normals, tangents);
     this.bindings.push(binding);
     return binding;
@@ -451,7 +453,7 @@ export class SoftSkeleton {
       softness[i] = Math.min(1, soft);
     }
     if (hint === "hair") this.reskinHair(index, weight, rest, softness, n, tris);
-    const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair" };
+    const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair", lash: hint === "hair" ? this.hairLash : undefined };
     this.attachFrame(binding, n, normals, tangents);
     this.bindings.push(binding);
     return binding;
@@ -583,7 +585,7 @@ export class SoftSkeleton {
       return { b: best, d: bestD };
     };
     for (const ids of clusters.values()) {
-      if (ids.length < 3 || ids.length > 160) continue;
+      if (ids.length < 3 || ids.length > 360) continue;
       let cx = 0;
       let cy = 0;
       let cz = 0;
@@ -619,7 +621,7 @@ export class SoftSkeleton {
       cy *= inv;
       cz *= inv;
       const span = Math.hypot(maxx - minx, maxy - miny, maxz - minz);
-      if (span > 0.036 || touchB < 0 || touch > 0.012) continue;
+      if (span > 0.05 || touchB < 0 || touch > 0.016) continue;
       const brow = nearest(cx, cy, cz, browBones);
       if (touch + 0.004 >= brow.d) continue;
       const upper = this.lidKind[touchB]! > 0;
@@ -631,6 +633,7 @@ export class SoftSkeleton {
         isLash[i] = 1;
       }
     }
+    this.hairLash = isLash;
     for (let i = 0; i < n; i++) {
       if (isLash[i]) continue;
       const x = rest[i * 3]!;
@@ -1713,7 +1716,65 @@ export class SoftSkeleton {
   }
 
   private applyAll() {
-    for (const b of this.bindings) this.apply(b);
+    for (const b of this.bindings) {
+      if (b.hair) this.applyHair(b);
+      else this.apply(b);
+    }
+  }
+
+  private applyHair(binding: SkinBinding) {
+    const { positions, rest, count, index, weight, lash } = binding;
+    const closing = this.closeAmtL > 0.002 || this.closeAmtR > 0.002;
+    const fi = this.iFace >= 0 ? this.iFace : this.iHead;
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const o = i * 4;
+      const rx = rest[i3]!;
+      const ry = rest[i3 + 1]!;
+      const rz = rest[i3 + 2]!;
+      const w1 = weight[o + 1]!;
+      const bi0 = index[o]!;
+      if (w1 < 0.02) {
+        _v.set(rx - this.rest[bi0 * 3]!, ry - this.rest[bi0 * 3 + 1]!, rz - this.rest[bi0 * 3 + 2]!);
+        _v.applyQuaternion(this.wrot[bi0]!);
+        _v.add(this.wpos[bi0]!);
+        positions[i3] = _v.x;
+        positions[i3 + 1] = _v.y;
+        positions[i3 + 2] = _v.z;
+      } else {
+        let ox = 0;
+        let oy = 0;
+        let oz = 0;
+        for (let k = 0; k < 4; k++) {
+          const w = weight[o + k]!;
+          if (w < 0.0008) continue;
+          const bi = index[o + k]!;
+          _v.set(rx - this.rest[bi * 3]!, ry - this.rest[bi * 3 + 1]!, rz - this.rest[bi * 3 + 2]!);
+          _v.applyQuaternion(this.wrot[bi]!);
+          _v.add(this.wpos[bi]!);
+          ox += _v.x * w;
+          oy += _v.y * w;
+          oz += _v.z * w;
+        }
+        positions[i3] = ox;
+        positions[i3 + 1] = oy;
+        positions[i3 + 2] = oz;
+      }
+      if (!closing || fi < 0) continue;
+      const onLid = Boolean(lash?.[i]) || this.lidKind[bi0] !== 0;
+      if (!onLid) continue;
+      const close = rx >= 0 ? this.closeAmtL : this.closeAmtR;
+      if (close < 0.002) continue;
+      const upper = this.lidKind[bi0] >= 0;
+      this.closeLidPos(rx, ry, rz, upper, close, _from);
+      _to.set(_from.x - this.rest[fi * 3]!, _from.y - this.rest[fi * 3 + 1]!, _from.z - this.rest[fi * 3 + 2]!);
+      _to.applyQuaternion(this.wrot[fi]!);
+      _to.add(this.wpos[fi]!);
+      const u = THREE.MathUtils.clamp(close * 1.1, 0, 1);
+      positions[i3] += (_to.x - positions[i3]) * u;
+      positions[i3 + 1] += (_to.y - positions[i3 + 1]) * u;
+      positions[i3 + 2] += (_to.z - positions[i3 + 2]) * u;
+    }
   }
 
   apply(binding: SkinBinding) {
@@ -1794,27 +1855,6 @@ export class SoftSkeleton {
         positions[i3] += br.sx * 0.82 * w + (lx / r) * plump * w;
         positions[i3 + 1] += br.sy * 0.78 * w + (ly / r) * plump * 0.35 * w;
         positions[i3 + 2] += br.sz * 0.8 * w + (lz / r) * plump * w;
-      }
-      const nrm = binding.normals;
-      const restN = binding.restN;
-      if (nrm && restN) {
-        let nx = 0;
-        let ny = 0;
-        let nz = 0;
-        for (let k = 0; k < 4; k++) {
-          const w = weight[o + k]!;
-          if (w < 0.0008) continue;
-          const bi = index[o + k]!;
-          _nml.set(restN[i3]!, restN[i3 + 1]!, restN[i3 + 2]!);
-          _nml.applyQuaternion(this.wrot[bi]!);
-          nx += _nml.x * w;
-          ny += _nml.y * w;
-          nz += _nml.z * w;
-        }
-        const nl = Math.hypot(nx, ny, nz) || 1;
-        nrm[i3] = nx / nl;
-        nrm[i3 + 1] = ny / nl;
-        nrm[i3 + 2] = nz / nl;
       }
     }
   }

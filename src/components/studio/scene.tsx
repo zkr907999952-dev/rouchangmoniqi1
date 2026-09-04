@@ -31,7 +31,7 @@ export default function Scene({
       onContextMenu={(e) => e.preventDefault()}
     >
       <Canvas
-        dpr={[1, 1.5]}
+        dpr={[1, 1.25]}
         camera={{ position: [0.28, 1.18, 2.35], fov: 34, near: 0.05, far: 40 }}
         gl={{
           antialias: true,
@@ -282,12 +282,12 @@ function ControlsBridge({
 function StudioLights() {
   return (
     <>
-      <ambientLight intensity={0.28} color="#e6d8c8" />
-      <hemisphereLight args={["#f2ebe3", "#3a322c", 0.42]} />
-      <directionalLight position={[1.8, 3.2, 2.4]} intensity={1.15} color="#fff1e0" />
-      <directionalLight position={[-2.6, 2.4, 0.6]} intensity={0.35} color="#c8d0dc" />
-      <pointLight position={[0, 1.78, -0.77]} intensity={4.8} distance={6.5} decay={2} color="#ffd7b0" />
-      <pointLight position={[1.26, 0.95, -1.68]} intensity={1.8} distance={3.6} decay={2} color="#ffc98a" />
+      <ambientLight intensity={0.34} color="#e6d8c8" />
+      <hemisphereLight args={["#f2ebe3", "#3a322c", 0.48]} />
+      <directionalLight position={[1.8, 3.4, 2.4]} intensity={1.05} color="#fff1e0" />
+      <directionalLight position={[-2.6, 2.6, 0.8]} intensity={0.32} color="#c8d0dc" />
+      <pointLight position={[0, 2.55, -1.35]} intensity={2.1} distance={8} decay={2} color="#ffd7b0" />
+      <pointLight position={[1.4, 1.7, -2.1]} intensity={1.1} distance={4.2} decay={2} color="#ffc98a" />
     </>
   );
 }
