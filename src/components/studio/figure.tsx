@@ -967,6 +967,39 @@ function inflateGuts(root: THREE.Object3D, navel: THREE.Vector3, inf: number) {
   });
 }
 
+function polishHair(mesh: THREE.Mesh) {
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const next = mats.map((raw) => {
+    const src = raw as THREE.MeshStandardMaterial | undefined;
+    const m = new THREE.MeshPhysicalMaterial();
+    if (src) m.copy(src);
+    m.vertexColors = false;
+    m.side = THREE.DoubleSide;
+    m.transparent = false;
+    m.opacity = 1;
+    m.alphaHash = true;
+    m.alphaTest = 0.22;
+    m.depthWrite = true;
+    m.depthTest = true;
+    m.metalness = 0;
+    m.roughness = THREE.MathUtils.clamp(src?.roughness ?? 0.52, 0.36, 0.6);
+    m.sheen = 0.8;
+    m.sheenColor = new THREE.Color("#4a2c18");
+    m.sheenRoughness = 0.36;
+    m.envMapIntensity = 0.42;
+    if (m.map) {
+      m.map.colorSpace = THREE.SRGBColorSpace;
+      m.map.anisotropy = Math.max(m.map.anisotropy, 8);
+    }
+    if (m.normalMap) m.normalScale.set(0.6, 0.6);
+    m.needsUpdate = true;
+    return m;
+  });
+  mesh.material = next.length === 1 ? next[0]! : next;
+  mesh.renderOrder = 3;
+  mesh.frustumCulled = false;
+}
+
 function polishOrgans(root: THREE.Object3D, kind: "gut" | "pelvis") {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -1238,13 +1271,37 @@ function FittedFigure({
       }
       pos.array.set(world);
       pos.needsUpdate = true;
+      const nrmAttr = geo.getAttribute("normal") as THREE.BufferAttribute | undefined;
+      const tanAttr = geo.getAttribute("tangent") as THREE.BufferAttribute | undefined;
+      const nmat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      if (nrmAttr && nrmAttr.array instanceof Float32Array) {
+        for (let i = 0; i < n; i++) {
+          _normal.fromBufferAttribute(nrmAttr, i).applyMatrix3(nmat).normalize();
+          nrmAttr.array[i * 3] = _normal.x;
+          nrmAttr.array[i * 3 + 1] = _normal.y;
+          nrmAttr.array[i * 3 + 2] = _normal.z;
+        }
+        nrmAttr.needsUpdate = true;
+      }
+      if (tanAttr && tanAttr.array instanceof Float32Array) {
+        const step = tanAttr.itemSize;
+        for (let i = 0; i < n; i++) {
+          _normal.fromBufferAttribute(tanAttr, i).transformDirection(mesh.matrixWorld).normalize();
+          tanAttr.array[i * step] = _normal.x;
+          tanAttr.array[i * step + 1] = _normal.y;
+          tanAttr.array[i * step + 2] = _normal.z;
+        }
+        tanAttr.needsUpdate = true;
+      }
       const hintName = hint ?? bindHint(mesh);
       const pack = nudeMapFor(meshMatKey(mesh), n);
       const tri = geo.getIndex()?.array as Uint16Array | Uint32Array | undefined;
+      const nrmArr = nrmAttr?.array instanceof Float32Array ? nrmAttr.array : undefined;
+      const tanArr = tanAttr?.array instanceof Float32Array ? tanAttr.array : undefined;
       const binding =
         pack && pack.count === n
-          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri)
-          : skeleton.bind(pos.array, hintName, tri);
+          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri, nrmArr, tanArr)
+          : skeleton.bind(pos.array, hintName, tri, nrmArr, tanArr);
       geo.setAttribute("color", new THREE.BufferAttribute(binding.colors, 3));
       boundGeos.push(geo);
       if (!hint && isTorsoMesh(mesh)) torsoBinds.push(binding);
@@ -1253,16 +1310,8 @@ function FittedFigure({
         side: THREE.DoubleSide,
       });
       weightViews.push({ mesh, orig: mesh.material, weight: weightMat });
-      if (hintName === "hair") {
-        mesh.renderOrder = 0;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const raw of mats) {
-          if (!raw) continue;
-          raw.depthWrite = true;
-          raw.depthTest = true;
-          raw.transparent = false;
-        }
-      } else if (!hint) {
+      if (hintName === "hair") polishHair(mesh);
+      else if (!hint) {
         mesh.renderOrder = 2;
       }
     };
@@ -1538,6 +1587,10 @@ function FittedFigure({
     for (const geo of setup.boundGeos) {
       const pos = geo.getAttribute("position");
       if (pos) pos.needsUpdate = true;
+      const nrm = geo.getAttribute("normal");
+      if (nrm) nrm.needsUpdate = true;
+      const tan = geo.getAttribute("tangent");
+      if (tan) tan.needsUpdate = true;
     }
   };
 

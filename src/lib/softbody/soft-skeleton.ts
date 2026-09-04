@@ -67,6 +67,10 @@ export type SkinBinding = {
   delta: Float32Array;
   dprev: Float32Array;
   hair?: boolean;
+  normals?: Float32Array;
+  restN?: Float32Array;
+  tangents?: Float32Array;
+  restT?: Float32Array;
 };
 
 type Hold =
@@ -81,6 +85,7 @@ const _from = new THREE.Vector3();
 const _to = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _v = new THREE.Vector3();
+const _nml = new THREE.Vector3();
 const _e = new THREE.Euler();
 const IDENTITY = new THREE.Quaternion();
 const _c = new THREE.Color();
@@ -303,7 +308,7 @@ export class SoftSkeleton {
     this.updateFK();
   }
 
-  bind(positions: Float32Array, hint = "body", tris?: ArrayLike<number>): SkinBinding {
+  bind(positions: Float32Array, hint = "body", tris?: ArrayLike<number>, normals?: Float32Array, tangents?: Float32Array): SkinBinding {
     const n = positions.length / 3;
     const index = new Uint16Array(n * 4);
     const weight = new Float32Array(n * 4);
@@ -406,11 +411,12 @@ export class SoftSkeleton {
     }
     if (hint === "hair") this.reskinHair(index, weight, rest, softness, n, tris);
     const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair" };
+    this.attachFrame(binding, n, normals, tangents);
     this.bindings.push(binding);
     return binding;
   }
 
-  bindPrepared(positions: Float32Array, index: Uint16Array, weight: Float32Array, hint = "body", tris?: ArrayLike<number>): SkinBinding {
+  bindPrepared(positions: Float32Array, index: Uint16Array, weight: Float32Array, hint = "body", tris?: ArrayLike<number>, normals?: Float32Array, tangents?: Float32Array): SkinBinding {
     const n = positions.length / 3;
     const rest = new Float32Array(positions);
     const colors = new Float32Array(n * 3);
@@ -446,8 +452,22 @@ export class SoftSkeleton {
     }
     if (hint === "hair") this.reskinHair(index, weight, rest, softness, n, tris);
     const binding: SkinBinding = { positions, rest, count: n, index, weight, colors, softness, delta, dprev, hair: hint === "hair" };
+    this.attachFrame(binding, n, normals, tangents);
     this.bindings.push(binding);
     return binding;
+  }
+
+  private attachFrame(binding: SkinBinding, n: number, normals?: Float32Array, tangents?: Float32Array) {
+    if (normals && normals.length >= n * 3) {
+      binding.normals = normals;
+      binding.restN = new Float32Array(n * 3);
+      binding.restN.set(normals.subarray(0, n * 3));
+    }
+    if (tangents && tangents.length >= n * 4) {
+      binding.tangents = tangents;
+      binding.restT = new Float32Array(n * 4);
+      binding.restT.set(tangents.subarray(0, n * 4));
+    }
   }
 
   private reskinHair(index: Uint16Array, weight: Float32Array, rest: Float32Array, softness: Float32Array, n: number, tris?: ArrayLike<number>) {
@@ -1774,6 +1794,49 @@ export class SoftSkeleton {
         positions[i3] += br.sx * 0.82 * w + (lx / r) * plump * w;
         positions[i3 + 1] += br.sy * 0.78 * w + (ly / r) * plump * 0.35 * w;
         positions[i3 + 2] += br.sz * 0.8 * w + (lz / r) * plump * w;
+      }
+      const nrm = binding.normals;
+      const restN = binding.restN;
+      if (nrm && restN) {
+        let nx = 0;
+        let ny = 0;
+        let nz = 0;
+        for (let k = 0; k < 4; k++) {
+          const w = weight[o + k]!;
+          if (w < 0.0008) continue;
+          const bi = index[o + k]!;
+          _nml.set(restN[i3]!, restN[i3 + 1]!, restN[i3 + 2]!);
+          _nml.applyQuaternion(this.wrot[bi]!);
+          nx += _nml.x * w;
+          ny += _nml.y * w;
+          nz += _nml.z * w;
+        }
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        nrm[i3] = nx / nl;
+        nrm[i3 + 1] = ny / nl;
+        nrm[i3 + 2] = nz / nl;
+      }
+      const tan = binding.tangents;
+      const restT = binding.restT;
+      if (tan && restT) {
+        const t4 = i * 4;
+        let tx = 0;
+        let ty = 0;
+        let tz = 0;
+        for (let k = 0; k < 4; k++) {
+          const w = weight[o + k]!;
+          if (w < 0.0008) continue;
+          const bi = index[o + k]!;
+          _nml.set(restT[t4]!, restT[t4 + 1]!, restT[t4 + 2]!);
+          _nml.applyQuaternion(this.wrot[bi]!);
+          tx += _nml.x * w;
+          ty += _nml.y * w;
+          tz += _nml.z * w;
+        }
+        const tl = Math.hypot(tx, ty, tz) || 1;
+        tan[t4] = tx / tl;
+        tan[t4 + 1] = ty / tl;
+        tan[t4 + 2] = tz / tl;
       }
     }
   }
