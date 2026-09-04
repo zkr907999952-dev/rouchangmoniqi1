@@ -1,0 +1,24 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-gpu"] });
+const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+page.setDefaultTimeout(120000);
+await page.goto("http://127.0.0.1:8080/", { waitUntil: "domcontentloaded" });
+await page.waitForFunction(() => Boolean(window.__vela?.setBlink && window.__vela?.frameFace), { timeout: 90000 });
+await page.waitForTimeout(5000);
+const info = await page.evaluate(() => {
+  const r = window.__vela.frameFace();
+  window.__vela.setBlink(0);
+  return { r, cam: null };
+});
+console.log("frameFace", JSON.stringify(info));
+await page.waitForTimeout(400);
+const openDbg = await page.evaluate(() => window.__vela.lidDebug?.());
+console.log("open", JSON.stringify(openDbg));
+const canvas = page.locator("canvas").first();
+await canvas.screenshot({ path: "/tmp/blink/open.png" });
+await page.evaluate(() => window.__vela.setBlink(1));
+await page.waitForTimeout(400);
+const closedDbg = await page.evaluate(() => window.__vela.lidDebug?.());
+console.log("closed", JSON.stringify(closedDbg));
+await canvas.screenshot({ path: "/tmp/blink/closed.png" });
+await browser.close();
