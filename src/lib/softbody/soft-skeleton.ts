@@ -1816,28 +1816,6 @@ export class SoftSkeleton {
         nrm[i3 + 1] = ny / nl;
         nrm[i3 + 2] = nz / nl;
       }
-      const tan = binding.tangents;
-      const restT = binding.restT;
-      if (tan && restT) {
-        const t4 = i * 4;
-        let tx = 0;
-        let ty = 0;
-        let tz = 0;
-        for (let k = 0; k < 4; k++) {
-          const w = weight[o + k]!;
-          if (w < 0.0008) continue;
-          const bi = index[o + k]!;
-          _nml.set(restT[t4]!, restT[t4 + 1]!, restT[t4 + 2]!);
-          _nml.applyQuaternion(this.wrot[bi]!);
-          tx += _nml.x * w;
-          ty += _nml.y * w;
-          tz += _nml.z * w;
-        }
-        const tl = Math.hypot(tx, ty, tz) || 1;
-        tan[t4] = tx / tl;
-        tan[t4 + 1] = ty / tl;
-        tan[t4 + 2] = tz / tl;
-      }
     }
   }
 }

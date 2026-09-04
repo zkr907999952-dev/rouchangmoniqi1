@@ -971,33 +971,29 @@ function polishHair(mesh: THREE.Mesh) {
   const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   const next = mats.map((raw) => {
     const src = raw as THREE.MeshStandardMaterial | undefined;
-    const m = new THREE.MeshPhysicalMaterial();
-    if (src) m.copy(src);
+    const m = (src ? src.clone() : new THREE.MeshStandardMaterial()) as THREE.MeshStandardMaterial;
     m.vertexColors = false;
     m.side = THREE.DoubleSide;
     m.transparent = false;
     m.opacity = 1;
-    m.alphaHash = true;
-    m.alphaTest = 0.22;
+    m.alphaHash = false;
+    m.alphaTest = 0.4;
     m.depthWrite = true;
     m.depthTest = true;
     m.metalness = 0;
-    m.roughness = THREE.MathUtils.clamp(src?.roughness ?? 0.52, 0.36, 0.6);
-    m.sheen = 0.8;
-    m.sheenColor = new THREE.Color("#4a2c18");
-    m.sheenRoughness = 0.36;
-    m.envMapIntensity = 0.42;
+    m.roughness = THREE.MathUtils.clamp(m.roughness || 0.5, 0.42, 0.62);
+    m.dithering = false;
+    m.envMapIntensity = 0.35;
     if (m.map) {
       m.map.colorSpace = THREE.SRGBColorSpace;
-      m.map.anisotropy = Math.max(m.map.anisotropy, 8);
+      m.map.anisotropy = 4;
     }
-    if (m.normalMap) m.normalScale.set(0.6, 0.6);
+    if (m.normalMap) m.normalScale.set(0.55, 0.55);
     m.needsUpdate = true;
     return m;
   });
   mesh.material = next.length === 1 ? next[0]! : next;
   mesh.renderOrder = 3;
-  mesh.frustumCulled = false;
 }
 
 function polishOrgans(root: THREE.Object3D, kind: "gut" | "pelvis") {
@@ -1272,7 +1268,6 @@ function FittedFigure({
       pos.array.set(world);
       pos.needsUpdate = true;
       const nrmAttr = geo.getAttribute("normal") as THREE.BufferAttribute | undefined;
-      const tanAttr = geo.getAttribute("tangent") as THREE.BufferAttribute | undefined;
       const nmat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
       if (nrmAttr && nrmAttr.array instanceof Float32Array) {
         for (let i = 0; i < n; i++) {
@@ -1283,25 +1278,14 @@ function FittedFigure({
         }
         nrmAttr.needsUpdate = true;
       }
-      if (tanAttr && tanAttr.array instanceof Float32Array) {
-        const step = tanAttr.itemSize;
-        for (let i = 0; i < n; i++) {
-          _normal.fromBufferAttribute(tanAttr, i).transformDirection(mesh.matrixWorld).normalize();
-          tanAttr.array[i * step] = _normal.x;
-          tanAttr.array[i * step + 1] = _normal.y;
-          tanAttr.array[i * step + 2] = _normal.z;
-        }
-        tanAttr.needsUpdate = true;
-      }
       const hintName = hint ?? bindHint(mesh);
       const pack = nudeMapFor(meshMatKey(mesh), n);
       const tri = geo.getIndex()?.array as Uint16Array | Uint32Array | undefined;
       const nrmArr = nrmAttr?.array instanceof Float32Array ? nrmAttr.array : undefined;
-      const tanArr = tanAttr?.array instanceof Float32Array ? tanAttr.array : undefined;
       const binding =
         pack && pack.count === n
-          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri, nrmArr, tanArr)
-          : skeleton.bind(pos.array, hintName, tri, nrmArr, tanArr);
+          ? skeleton.bindPrepared(pos.array, pack.index, pack.weight, hintName, tri, nrmArr)
+          : skeleton.bind(pos.array, hintName, tri, nrmArr);
       geo.setAttribute("color", new THREE.BufferAttribute(binding.colors, 3));
       boundGeos.push(geo);
       if (!hint && isTorsoMesh(mesh)) torsoBinds.push(binding);
@@ -1589,8 +1573,6 @@ function FittedFigure({
       if (pos) pos.needsUpdate = true;
       const nrm = geo.getAttribute("normal");
       if (nrm) nrm.needsUpdate = true;
-      const tan = geo.getAttribute("tangent");
-      if (tan) tan.needsUpdate = true;
     }
   };
 
