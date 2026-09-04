@@ -191,8 +191,8 @@ export class SoftSkeleton {
   private blinkOn = true;
   private eyeOpenL = 1;
   private eyeOpenR = 1;
-  private blinkRate = 15;
-  private blinkSpeed = 0.5;
+  private blinkRate = 38;
+  private blinkSpeed = 1;
   private readonly brL = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly brR = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly bindings: SkinBinding[] = [];

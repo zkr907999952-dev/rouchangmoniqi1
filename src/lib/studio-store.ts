@@ -332,8 +332,8 @@ export const useStudio = create<StudioState>((set) => ({
   blinkEnabled: true,
   eyeOpenL: 1,
   eyeOpenR: 1,
-  blinkRate: 15,
-  blinkSpeed: 0.5,
+  blinkRate: 38,
+  blinkSpeed: 1,
   setParam: (key, value) =>
     set((s) => ({
       ...s,
