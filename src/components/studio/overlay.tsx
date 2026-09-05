@@ -995,7 +995,7 @@ export function Overlay() {
                 [
                   { label: "嘴唇幅度", value: mouthLipAmp, min: 0.3, max: 2, set: setMouthLipAmp },
                   { label: "张嘴幅度", value: mouthAmp, min: 0.3, max: 2, set: setMouthAmp },
-                  { label: "下巴幅度", value: mouthChinAmp, min: 0.3, max: 2, set: setMouthChinAmp },
+                  { label: "下巴幅度", value: mouthChinAmp, min: 0, max: 2, set: setMouthChinAmp },
                 ] as const
               ).map((item) => (
                 <label key={item.label} className="mt-3 block">
@@ -1021,7 +1021,7 @@ export function Overlay() {
                 </label>
               ))}
               <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                嘴唇幅度管口裂和嘴型。张嘴幅度管张嘴时下巴跟着转多少。下巴幅度管下颌绕关节旋转的行程。牙齿和口腔不跟着下巴。
+                下巴幅度只调下巴开合。下牙随张嘴绕关节打开，不受下巴幅度影响。
               </p>
               {(
                 [

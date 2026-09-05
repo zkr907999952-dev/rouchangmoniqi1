@@ -307,8 +307,9 @@ export class SoftSkeleton {
       this.tmjZ = this.rest[this.iFace * 3 + 2]! - 0.006;
       for (let i = 0; i < this.count; i++) {
         const nm = this.names[i]!;
-        if (nm !== "C_Chin" && !/Dteeth/.test(nm) && !/Tongroot|Tongtip/.test(nm)) continue;
-        this.jawKind[i] = 1;
+        if (nm === "C_Chin") this.jawKind[i] = 1;
+        else if (/Dteeth/.test(nm) || /Tongroot|Tongtip/.test(nm)) this.jawKind[i] = 2;
+        else continue;
         this.jawDy[i] = this.rest[i * 3 + 1]! - this.tmjY;
         this.jawDz[i] = this.rest[i * 3 + 2]! - this.tmjZ;
       }
@@ -1305,7 +1306,7 @@ export class SoftSkeleton {
     const followM = 1 - Math.exp(-7 * d);
     this.mouthU += (mouthT - this.mouthU) * followM;
     this.mouthAmpU += (THREE.MathUtils.clamp(params.mouthAmp, 0.3, 2) - this.mouthAmpU) * followM;
-    this.mouthChinAmpU += (THREE.MathUtils.clamp(params.mouthChinAmp, 0.3, 2) - this.mouthChinAmpU) * followM;
+    this.mouthChinAmpU += (THREE.MathUtils.clamp(params.mouthChinAmp, 0, 2) - this.mouthChinAmpU) * followM;
     this.mouthLipAmpU += (THREE.MathUtils.clamp(params.mouthLipAmp, 0.3, 2) - this.mouthLipAmpU) * followM;
     this.mouthSmileU += (THREE.MathUtils.clamp(params.mouthSmile, -1, 1) - this.mouthSmileU) * followM;
     this.mouthPuckerU += (THREE.MathUtils.clamp(params.mouthPucker, 0, 1) - this.mouthPuckerU) * followM;
@@ -1351,7 +1352,7 @@ export class SoftSkeleton {
       }
       let targetQ = isFace && this.expression !== "rest" ? this.exprQ[i]! : this.poseQ[i]!;
       if (!locked && this.jawKind[i]) {
-        const th = 0.34 * this.mouthU * this.mouthAmpU * this.mouthChinAmpU;
+        const th = this.jawTheta(i);
         if (th > 0.001) {
           _q.setFromEuler(_e.set(th, 0, 0, "XYZ"));
           _q2.copy(targetQ).multiply(_q);
@@ -1875,15 +1876,23 @@ export class SoftSkeleton {
     if (ra >= 0) this.q[ra]!.setFromEuler(_e.set(this.brR.sy * spin * 0.22, this.brR.sx * spin * 0.2, 0));
   }
 
+  private jawTheta(i: number) {
+    const kind = this.jawKind[i]!;
+    if (!kind || this.mouthU < 0.001) return 0;
+    const base = 0.34 * this.mouthU * this.mouthAmpU;
+    return kind === 1 ? base * this.mouthChinAmpU : base;
+  }
+
   private updateFK() {
     for (let i = 0; i < this.count; i++) {
       const p = this.parent[i];
       const gu = this.mouthU * this.mouthLipAmpU;
       const lu = this.mouthLipAmpU;
+      const wu = this.mouthWidthU + this.mouthU;
       let cy = 0;
       let cz = 0;
       if (this.jawKind[i]) {
-        const th = 0.34 * this.mouthU * this.mouthAmpU * this.mouthChinAmpU;
+        const th = this.jawTheta(i);
         if (th > 0.001) {
           const c = Math.cos(th);
           const s = Math.sin(th);
@@ -1897,7 +1906,7 @@ export class SoftSkeleton {
         this.mouthOff[i]!.x * gu +
         this.mouthSmileOff[i]!.x * this.mouthSmileU * lu +
         this.mouthPuckerOff[i]!.x * this.mouthPuckerU * lu +
-        this.mouthWidthOff[i]!.x * this.mouthWidthU * lu;
+        this.mouthWidthOff[i]!.x * wu * lu;
       const oy =
         this.exprOff[i]!.y +
         this.off[i]!.y +
@@ -1905,7 +1914,7 @@ export class SoftSkeleton {
         cy +
         this.mouthSmileOff[i]!.y * this.mouthSmileU * lu +
         this.mouthPuckerOff[i]!.y * this.mouthPuckerU * lu +
-        this.mouthWidthOff[i]!.y * this.mouthWidthU * lu;
+        this.mouthWidthOff[i]!.y * wu * lu;
       const oz =
         this.exprOff[i]!.z +
         this.off[i]!.z +
@@ -1913,7 +1922,7 @@ export class SoftSkeleton {
         cz +
         this.mouthSmileOff[i]!.z * this.mouthSmileU * lu +
         this.mouthPuckerOff[i]!.z * this.mouthPuckerU * lu +
-        this.mouthWidthOff[i]!.z * this.mouthWidthU * lu;
+        this.mouthWidthOff[i]!.z * wu * lu;
       if (p < 0) {
         this.wrot[i]!.copy(this.q[i]!);
         this.wpos[i]!.set(this.rest[i * 3]! + ox, this.rest[i * 3 + 1]! + oy, this.rest[i * 3 + 2]! + oz);

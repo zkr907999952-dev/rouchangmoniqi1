@@ -427,7 +427,7 @@ export const useStudio = create<StudioState>((set) => ({
   setBlinkSpeed: (blinkSpeed) => set({ blinkSpeed: Math.max(0, Math.min(1, blinkSpeed)) }),
   setMouthOpen: (mouthOpen) => set({ mouthOpen: Math.max(0, Math.min(1, mouthOpen)) }),
   setMouthAmp: (mouthAmp) => set({ mouthAmp: Math.max(0.3, Math.min(2, mouthAmp)) }),
-  setMouthChinAmp: (mouthChinAmp) => set({ mouthChinAmp: Math.max(0.3, Math.min(2, mouthChinAmp)) }),
+  setMouthChinAmp: (mouthChinAmp) => set({ mouthChinAmp: Math.max(0, Math.min(2, mouthChinAmp)) }),
   setMouthLipAmp: (mouthLipAmp) => set({ mouthLipAmp: Math.max(0.3, Math.min(2, mouthLipAmp)) }),
   setMouthSmile: (mouthSmile) => set({ mouthSmile: Math.max(-1, Math.min(1, mouthSmile)) }),
   setMouthPucker: (mouthPucker) => set({ mouthPucker: Math.max(0, Math.min(1, mouthPucker)) }),
