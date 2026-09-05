@@ -120,6 +120,12 @@ export function Overlay() {
   const setBlinkSpeed = useStudio((s) => s.setBlinkSpeed);
   const mouthOpen = useStudio((s) => s.mouthOpen);
   const setMouthOpen = useStudio((s) => s.setMouthOpen);
+  const mouthAmp = useStudio((s) => s.mouthAmp);
+  const setMouthAmp = useStudio((s) => s.setMouthAmp);
+  const mouthChinAmp = useStudio((s) => s.mouthChinAmp);
+  const setMouthChinAmp = useStudio((s) => s.setMouthChinAmp);
+  const mouthLipAmp = useStudio((s) => s.mouthLipAmp);
+  const setMouthLipAmp = useStudio((s) => s.setMouthLipAmp);
   const mouthSmile = useStudio((s) => s.mouthSmile);
   const setMouthSmile = useStudio((s) => s.setMouthSmile);
   const mouthPucker = useStudio((s) => s.mouthPucker);
@@ -985,8 +991,37 @@ export function Overlay() {
                   <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
                 </Slider.Root>
               </label>
+              {(
+                [
+                  { label: "嘴唇幅度", value: mouthLipAmp, min: 0.3, max: 2, set: setMouthLipAmp },
+                  { label: "张嘴幅度", value: mouthAmp, min: 0.3, max: 2, set: setMouthAmp },
+                  { label: "下巴幅度", value: mouthChinAmp, min: 0.3, max: 2, set: setMouthChinAmp },
+                ] as const
+              ).map((item) => (
+                <label key={item.label} className="mt-3 block">
+                  <span className="mb-1.5 flex items-center justify-between text-xs text-muted">
+                    <span>{item.label}</span>
+                    <span className="tabular-nums text-fg">{item.value.toFixed(2)}</span>
+                  </span>
+                  <Slider.Root
+                    value={[item.value]}
+                    min={item.min}
+                    max={item.max}
+                    step={0.01}
+                    onValueChange={([v]) => {
+                      if (typeof v === "number") item.set(v);
+                    }}
+                    className="relative flex h-5 w-full touch-none items-center"
+                  >
+                    <Slider.Track className="relative h-1 grow rounded-full bg-surface-2">
+                      <Slider.Range className="absolute h-full rounded-full bg-accent" />
+                    </Slider.Track>
+                    <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
+                  </Slider.Root>
+                </label>
+              ))}
               <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                下巴下颌带动下唇、下牙和舌头。嘴角、嘟嘴、嘴宽可叠在张嘴上。
+                嘴唇幅度管口裂和嘴型。张嘴幅度管张嘴时下巴跟着转多少。下巴幅度管下颌绕关节旋转的行程。牙齿和口腔不跟着下巴。
               </p>
               {(
                 [

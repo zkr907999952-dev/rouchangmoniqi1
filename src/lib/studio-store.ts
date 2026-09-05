@@ -278,6 +278,9 @@ type StudioState = StudioParams & {
   blinkRate: number;
   blinkSpeed: number;
   mouthOpen: number;
+  mouthAmp: number;
+  mouthChinAmp: number;
+  mouthLipAmp: number;
   mouthSmile: number;
   mouthPucker: number;
   mouthWidth: number;
@@ -302,6 +305,9 @@ type StudioState = StudioParams & {
   setBlinkRate: (v: number) => void;
   setBlinkSpeed: (v: number) => void;
   setMouthOpen: (v: number) => void;
+  setMouthAmp: (v: number) => void;
+  setMouthChinAmp: (v: number) => void;
+  setMouthLipAmp: (v: number) => void;
   setMouthSmile: (v: number) => void;
   setMouthPucker: (v: number) => void;
   setMouthWidth: (v: number) => void;
@@ -343,6 +349,9 @@ export const useStudio = create<StudioState>((set) => ({
   blinkRate: 38,
   blinkSpeed: 1,
   mouthOpen: 0,
+  mouthAmp: 1,
+  mouthChinAmp: 1,
+  mouthLipAmp: 1,
   mouthSmile: 0,
   mouthPucker: 0,
   mouthWidth: 0,
@@ -417,6 +426,9 @@ export const useStudio = create<StudioState>((set) => ({
   setBlinkRate: (blinkRate) => set({ blinkRate: Math.max(4, Math.min(40, blinkRate)) }),
   setBlinkSpeed: (blinkSpeed) => set({ blinkSpeed: Math.max(0, Math.min(1, blinkSpeed)) }),
   setMouthOpen: (mouthOpen) => set({ mouthOpen: Math.max(0, Math.min(1, mouthOpen)) }),
+  setMouthAmp: (mouthAmp) => set({ mouthAmp: Math.max(0.3, Math.min(2, mouthAmp)) }),
+  setMouthChinAmp: (mouthChinAmp) => set({ mouthChinAmp: Math.max(0.3, Math.min(2, mouthChinAmp)) }),
+  setMouthLipAmp: (mouthLipAmp) => set({ mouthLipAmp: Math.max(0.3, Math.min(2, mouthLipAmp)) }),
   setMouthSmile: (mouthSmile) => set({ mouthSmile: Math.max(-1, Math.min(1, mouthSmile)) }),
   setMouthPucker: (mouthPucker) => set({ mouthPucker: Math.max(0, Math.min(1, mouthPucker)) }),
   setMouthWidth: (mouthWidth) => set({ mouthWidth: Math.max(-1, Math.min(1, mouthWidth)) }),
