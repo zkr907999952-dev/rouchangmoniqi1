@@ -135,6 +135,8 @@ function ControlsBridge({
     const HOLD_MS = 280;
     const sph = new THREE.Spherical();
     const offset = new THREE.Vector3();
+    const _right = new THREE.Vector3();
+    const _up = new THREE.Vector3();
     let pressT = 0;
     let pressX = 0;
     let pressY = 0;
@@ -168,6 +170,64 @@ function ControlsBridge({
       camera.position.copy(c.target).add(offset);
       camera.lookAt(c.target);
       c.update();
+    };
+
+    const minD = 0.12;
+    const maxD = 6.2;
+    const panCam = (dx: number, dy: number) => {
+      const c = controlsRef.current;
+      if (!c) return;
+      const el = gl.domElement;
+      const dist = camera.position.distanceTo(c.target);
+      const persp = camera as THREE.PerspectiveCamera;
+      const h = 2 * dist * Math.tan(((persp.fov ?? 50) * Math.PI) / 360);
+      const w = h * (el.clientWidth / Math.max(1, el.clientHeight));
+      _right.setFromMatrixColumn(camera.matrix, 0);
+      _up.setFromMatrixColumn(camera.matrix, 1);
+      const tx = (-dx * w) / Math.max(1, el.clientWidth);
+      const ty = (dy * h) / Math.max(1, el.clientHeight);
+      c.target.addScaledVector(_right, tx);
+      c.target.addScaledVector(_up, ty);
+      camera.position.addScaledVector(_right, tx);
+      camera.position.addScaledVector(_up, ty);
+      c.update();
+    };
+    const dollyCam = (scale: number, walk: number) => {
+      const c = controlsRef.current;
+      if (!c) return;
+      offset.copy(camera.position).sub(c.target);
+      let len = offset.length() * scale;
+      const fwd = offset.clone().normalize();
+      if (len < minD) {
+        const extra = minD - len;
+        len = minD;
+        c.target.addScaledVector(fwd, -extra);
+        camera.position.addScaledVector(fwd, -extra);
+      }
+      if (walk !== 0) {
+        c.target.addScaledVector(fwd, -walk);
+        camera.position.addScaledVector(fwd, -walk);
+      }
+      len = THREE.MathUtils.clamp(len, minD, maxD);
+      offset.setLength(len);
+      camera.position.copy(c.target).add(offset);
+      camera.lookAt(c.target);
+      c.update();
+    };
+
+    let two = false;
+    let midX = 0;
+    let midY = 0;
+    let pinch = 0;
+
+    const twoPos = (e: TouchEvent) => {
+      const a = e.touches[0]!;
+      const b = e.touches[1]!;
+      return {
+        x: (a.clientX + b.clientX) * 0.5,
+        y: (a.clientY + b.clientY) * 0.5,
+        d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+      };
     };
 
     const down = (e: PointerEvent) => {
@@ -230,10 +290,54 @@ function ControlsBridge({
       rotId = -1;
       setRotateFlag(false);
       window.dispatchEvent(new Event("studio-cancel-grab"));
+      const p = twoPos(e);
+      two = true;
+      midX = p.x;
+      midY = p.y;
+      pinch = p.d;
       const c = controlsRef.current;
       if (c) {
-        c.enablePan = true;
+        c.enablePan = false;
         c.enableRotate = false;
+        c.enableZoom = false;
+        c.enableDamping = false;
+      }
+    };
+    const touchMove = (e: TouchEvent) => {
+      if (!two || e.touches.length < 2) return;
+      const p = twoPos(e);
+      panCam(p.x - midX, p.y - midY);
+      const c = controlsRef.current;
+      const dist = c ? camera.position.distanceTo(c.target) : 1;
+      const pinchDelta = p.d - pinch;
+      if (Math.abs(pinchDelta) > 10 && pinch > 8 && p.d > 8) {
+        const scale = pinch / p.d;
+        const walk = dist <= minD + 0.05 && scale < 1 ? (1 - scale) * 0.28 : 0;
+        dollyCam(scale, walk);
+      } else if (dist <= minD + 0.08) {
+        const walk = (p.y - midY) * -0.0032;
+        if (Math.abs(walk) > 1e-5) dollyCam(1, walk);
+      }
+      midX = p.x;
+      midY = p.y;
+      pinch = p.d;
+      e.preventDefault();
+    };
+    const touchEnd = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        const p = twoPos(e);
+        midX = p.x;
+        midY = p.y;
+        pinch = p.d;
+        return;
+      }
+      two = false;
+      const c = controlsRef.current;
+      if (c) {
+        c.enablePan = !useStudio.getState().grabbing;
+        c.enableRotate = !useStudio.getState().grabbing;
+        c.enableZoom = true;
+        c.enableDamping = true;
       }
     };
 
@@ -242,12 +346,18 @@ function ControlsBridge({
     host.addEventListener("pointerup", up, true);
     host.addEventListener("pointercancel", up, true);
     host.addEventListener("touchstart", touchStart, { capture: true, passive: true });
+    host.addEventListener("touchmove", touchMove, { capture: true, passive: false });
+    host.addEventListener("touchend", touchEnd, { capture: true, passive: true });
+    host.addEventListener("touchcancel", touchEnd, { capture: true, passive: true });
     return () => {
       host.removeEventListener("pointerdown", down, true);
       host.removeEventListener("pointermove", move, true);
       host.removeEventListener("pointerup", up, true);
       host.removeEventListener("pointercancel", up, true);
       host.removeEventListener("touchstart", touchStart, true);
+      host.removeEventListener("touchmove", touchMove, true);
+      host.removeEventListener("touchend", touchEnd, true);
+      host.removeEventListener("touchcancel", touchEnd, true);
     };
   }, [gl, camera, controlsRef]);
 
@@ -261,11 +371,11 @@ function ControlsBridge({
       dampingFactor={0.08}
       autoRotate={autoRotate && !grabbing}
       autoRotateSpeed={0.45}
-      minDistance={0.45}
-      maxDistance={5.4}
+      minDistance={0.12}
+      maxDistance={6.2}
       minPolarAngle={Math.PI * 0.08}
       maxPolarAngle={Math.PI * 0.9}
-      target={[0, 0.95, 0.02]}
+      screenSpacePanning
       mouseButtons={{
         LEFT: -1 as unknown as THREE.MOUSE,
         MIDDLE: THREE.MOUSE.PAN,
@@ -273,7 +383,7 @@ function ControlsBridge({
       }}
       touches={{
         ONE: -1 as unknown as THREE.TOUCH,
-        TWO: THREE.TOUCH.DOLLY_PAN,
+        TWO: -1 as unknown as THREE.TOUCH,
       }}
     />
   );

@@ -278,6 +278,9 @@ type StudioState = StudioParams & {
   blinkRate: number;
   blinkSpeed: number;
   mouthOpen: number;
+  mouthSmile: number;
+  mouthPucker: number;
+  mouthWidth: number;
   setParam: <K extends keyof StudioParams>(key: K, value: StudioParams[K]) => void;
   applyPreset: (id: PresetId) => void;
   setInteractMode: (mode: InteractMode) => void;
@@ -299,6 +302,9 @@ type StudioState = StudioParams & {
   setBlinkRate: (v: number) => void;
   setBlinkSpeed: (v: number) => void;
   setMouthOpen: (v: number) => void;
+  setMouthSmile: (v: number) => void;
+  setMouthPucker: (v: number) => void;
+  setMouthWidth: (v: number) => void;
   shake: () => void;
   fireStrike: (point?: [number, number, number] | null) => void;
   resetSim: () => void;
@@ -337,6 +343,9 @@ export const useStudio = create<StudioState>((set) => ({
   blinkRate: 38,
   blinkSpeed: 1,
   mouthOpen: 0,
+  mouthSmile: 0,
+  mouthPucker: 0,
+  mouthWidth: 0,
   setParam: (key, value) =>
     set((s) => ({
       ...s,
@@ -408,6 +417,9 @@ export const useStudio = create<StudioState>((set) => ({
   setBlinkRate: (blinkRate) => set({ blinkRate: Math.max(4, Math.min(40, blinkRate)) }),
   setBlinkSpeed: (blinkSpeed) => set({ blinkSpeed: Math.max(0, Math.min(1, blinkSpeed)) }),
   setMouthOpen: (mouthOpen) => set({ mouthOpen: Math.max(0, Math.min(1, mouthOpen)) }),
+  setMouthSmile: (mouthSmile) => set({ mouthSmile: Math.max(-1, Math.min(1, mouthSmile)) }),
+  setMouthPucker: (mouthPucker) => set({ mouthPucker: Math.max(0, Math.min(1, mouthPucker)) }),
+  setMouthWidth: (mouthWidth) => set({ mouthWidth: Math.max(-1, Math.min(1, mouthWidth)) }),
   shake: () => set((s) => ({ shakeNonce: s.shakeNonce + 1 })),
   fireStrike: (point = null) =>
     set((s) => ({ strikeNonce: s.strikeNonce + 1, strikePoint: point ?? null })),

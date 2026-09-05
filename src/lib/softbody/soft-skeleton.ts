@@ -36,6 +36,9 @@ export type SkelParams = {
   blinkRate: number;
   blinkSpeed: number;
   mouthOpen: number;
+  mouthSmile: number;
+  mouthPucker: number;
+  mouthWidth: number;
 };
 
 export type ExpressionId = "rest" | "smile" | "surprise" | "open";
@@ -196,9 +199,15 @@ export class SoftSkeleton {
   private blinkSpeed = 1;
   private mouthOpen = 0;
   private mouthU = 0;
+  private mouthSmileU = 0;
+  private mouthPuckerU = 0;
+  private mouthWidthU = 0;
   private readonly mouthKind: Int8Array;
   private readonly mouthQ: THREE.Quaternion[] = [];
   private readonly mouthOff: THREE.Vector3[] = [];
+  private readonly mouthSmileOff: THREE.Vector3[] = [];
+  private readonly mouthPuckerOff: THREE.Vector3[] = [];
+  private readonly mouthWidthOff: THREE.Vector3[] = [];
   private readonly brL = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly brR = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, sz: 0, svx: 0, svy: 0, svz: 0 };
   private readonly bindings: SkinBinding[] = [];
@@ -291,10 +300,19 @@ export class SoftSkeleton {
     const faceI = this.iFace >= 0 ? this.iFace : 0;
     const hy = this.rest[faceI * 3 + 1]! - 0.01;
     const hz = this.rest[faceI * 3 + 2]! + 0.006;
-    const jawT = 0.16;
+    const jawT = 0.32;
+    const add = (arr: THREE.Vector3[], i: number, x: number, y: number, z: number) => {
+      arr[i]!.x += x;
+      arr[i]!.y += y;
+      arr[i]!.z += z;
+      this.mouthKind[i] = 1;
+    };
     for (let i = 0; i < this.count; i++) {
       this.mouthQ.push(new THREE.Quaternion());
       this.mouthOff.push(new THREE.Vector3());
+      this.mouthSmileOff.push(new THREE.Vector3());
+      this.mouthPuckerOff.push(new THREE.Vector3());
+      this.mouthWidthOff.push(new THREE.Vector3());
       const nm = this.names[i]!;
       let w = 0;
       if (nm === "C_Chin" || /Dteeth/.test(nm)) w = 1;
@@ -306,16 +324,44 @@ export class SoftSkeleton {
       else if (/^(L|R)_Dlip/.test(nm)) w = 0.82;
       else if (nm === "C_Ulip") w = -0.03;
       else if (nm === "C_Ulipout" || /^(L|R)_Ulip_A$/.test(nm)) w = -0.018;
-      if (!w) continue;
-      this.mouthKind[i] = 1;
-      const y = this.rest[i * 3 + 1]!;
-      const z = this.rest[i * 3 + 2]!;
-      const dy = y - hy;
-      const dz = z - hz;
-      const th = jawT * w;
-      const c = Math.cos(th);
-      const s = Math.sin(th);
-      this.mouthOff[i]!.set(0, hy + dy * c - dz * s - y, hz + dy * s + dz * c - z);
+      if (w) {
+        this.mouthKind[i] = 1;
+        const y = this.rest[i * 3 + 1]!;
+        const z = this.rest[i * 3 + 2]!;
+        const dy = y - hy;
+        const dz = z - hz;
+        const th = jawT * w;
+        const c = Math.cos(th);
+        const s = Math.sin(th);
+        this.mouthOff[i]!.set(0, hy + dy * c - dz * s - y, hz + dy * s + dz * c - z);
+      }
+      const sx = this.rest[i * 3]! >= 0 ? 1 : -1;
+      if (/^(L|R)_Ucor$/.test(nm)) {
+        add(this.mouthSmileOff, i, sx * 0.0055, 0.005, 0.0015);
+        add(this.mouthPuckerOff, i, -sx * 0.0045, 0, 0.004);
+        add(this.mouthWidthOff, i, sx * 0.006, 0, 0);
+      } else if (/^(L|R)_Dcor$/.test(nm)) {
+        add(this.mouthSmileOff, i, sx * 0.0045, 0.003, 0.001);
+        add(this.mouthPuckerOff, i, -sx * 0.004, -0.001, 0.0035);
+        add(this.mouthWidthOff, i, sx * 0.0055, 0, 0);
+      } else if (/Ucorin|Dcorin/.test(nm)) {
+        add(this.mouthSmileOff, i, sx * 0.003, 0.002, 0.001);
+        add(this.mouthPuckerOff, i, -sx * 0.003, 0, 0.003);
+        add(this.mouthWidthOff, i, sx * 0.004, 0, 0);
+      } else if (/^(L|R)_Dlipout_B$/.test(nm)) {
+        add(this.mouthSmileOff, i, sx * 0.0035, 0.0035, 0);
+        add(this.mouthPuckerOff, i, -sx * 0.003, 0, 0.002);
+        add(this.mouthWidthOff, i, sx * 0.0045, 0, 0);
+      } else if (nm === "C_Ulip" || nm === "C_Ulipout") {
+        add(this.mouthSmileOff, i, 0, 0.002, 0);
+        add(this.mouthPuckerOff, i, 0, 0.0015, 0.005);
+      } else if (nm === "C_Dlip" || nm === "C_Dlipout") {
+        add(this.mouthSmileOff, i, 0, 0.001, 0);
+        add(this.mouthPuckerOff, i, 0, -0.0015, 0.005);
+      } else if (/Cheek_C/.test(nm)) {
+        add(this.mouthSmileOff, i, sx * 0.0025, 0.002, 0);
+        add(this.mouthWidthOff, i, sx * 0.003, 0, 0);
+      }
     }
     for (let i = 0; i < this.count; i++) {
       if (this.group[i] !== "hair") continue;
@@ -1180,7 +1226,11 @@ export class SoftSkeleton {
     this.blinkSpeed = THREE.MathUtils.clamp(params.blinkSpeed, 0, 1);
     this.mouthOpen = THREE.MathUtils.clamp(params.mouthOpen, 0, 1);
     const mouthT = this.mouthOpen * this.mouthOpen * (3 - 2 * this.mouthOpen);
-    this.mouthU += (mouthT - this.mouthU) * (1 - Math.exp(-9 * d));
+    const followM = 1 - Math.exp(-9 * d);
+    this.mouthU += (mouthT - this.mouthU) * followM;
+    this.mouthSmileU += (THREE.MathUtils.clamp(params.mouthSmile, -1, 1) - this.mouthSmileU) * followM;
+    this.mouthPuckerU += (THREE.MathUtils.clamp(params.mouthPucker, 0, 1) - this.mouthPuckerU) * followM;
+    this.mouthWidthU += (THREE.MathUtils.clamp(params.mouthWidth, -1, 1) - this.mouthWidthU) * followM;
     if (this.mouthU < 0.0008) this.mouthU = 0;
     this.updateGaze(d);
     this.updateBlink(d);
@@ -1746,9 +1796,27 @@ export class SoftSkeleton {
   private updateFK() {
     for (let i = 0; i < this.count; i++) {
       const p = this.parent[i];
-      const ox = this.exprOff[i]!.x + this.off[i]!.x + this.mouthOff[i]!.x * this.mouthU;
-      const oy = this.exprOff[i]!.y + this.off[i]!.y + this.mouthOff[i]!.y * this.mouthU;
-      const oz = this.exprOff[i]!.z + this.off[i]!.z + this.mouthOff[i]!.z * this.mouthU;
+      const ox =
+        this.exprOff[i]!.x +
+        this.off[i]!.x +
+        this.mouthOff[i]!.x * this.mouthU +
+        this.mouthSmileOff[i]!.x * this.mouthSmileU +
+        this.mouthPuckerOff[i]!.x * this.mouthPuckerU +
+        this.mouthWidthOff[i]!.x * this.mouthWidthU;
+      const oy =
+        this.exprOff[i]!.y +
+        this.off[i]!.y +
+        this.mouthOff[i]!.y * this.mouthU +
+        this.mouthSmileOff[i]!.y * this.mouthSmileU +
+        this.mouthPuckerOff[i]!.y * this.mouthPuckerU +
+        this.mouthWidthOff[i]!.y * this.mouthWidthU;
+      const oz =
+        this.exprOff[i]!.z +
+        this.off[i]!.z +
+        this.mouthOff[i]!.z * this.mouthU +
+        this.mouthSmileOff[i]!.z * this.mouthSmileU +
+        this.mouthPuckerOff[i]!.z * this.mouthPuckerU +
+        this.mouthWidthOff[i]!.z * this.mouthWidthU;
       if (p < 0) {
         this.wrot[i]!.copy(this.q[i]!);
         this.wpos[i]!.set(this.rest[i * 3]! + ox, this.rest[i * 3 + 1]! + oy, this.rest[i * 3 + 2]! + oz);

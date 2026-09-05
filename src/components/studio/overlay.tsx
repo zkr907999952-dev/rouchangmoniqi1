@@ -120,6 +120,12 @@ export function Overlay() {
   const setBlinkSpeed = useStudio((s) => s.setBlinkSpeed);
   const mouthOpen = useStudio((s) => s.mouthOpen);
   const setMouthOpen = useStudio((s) => s.setMouthOpen);
+  const mouthSmile = useStudio((s) => s.mouthSmile);
+  const setMouthSmile = useStudio((s) => s.setMouthSmile);
+  const mouthPucker = useStudio((s) => s.mouthPucker);
+  const setMouthPucker = useStudio((s) => s.setMouthPucker);
+  const mouthWidth = useStudio((s) => s.mouthWidth);
+  const setMouthWidth = useStudio((s) => s.setMouthWidth);
   const grabbing = useStudio((s) => s.grabbing);
   const loading = useStudio((s) => s.loading);
   const loadProgress = useStudio((s) => s.loadProgress);
@@ -266,10 +272,10 @@ export function Overlay() {
 
       <aside
         className={cn(
-          "pointer-events-auto absolute right-4 bottom-4 left-4 max-h-[52vh] overflow-hidden rounded-xl border border-border bg-surface sm:right-6 sm:bottom-auto sm:left-auto sm:top-24 sm:max-h-[calc(100dvh-8rem)] sm:w-80",
+          "pointer-events-auto absolute right-3 bottom-3 left-3 flex max-h-[calc(100dvh-5.25rem)] flex-col overflow-hidden rounded-xl border border-border bg-surface sm:right-6 sm:bottom-auto sm:left-auto sm:top-24 sm:max-h-[calc(100dvh-8rem)] sm:w-80",
         )}
       >
-        <div className="grid grid-cols-5 border-b border-border">
+        <div className="grid shrink-0 grid-cols-5 border-b border-border">
           {PANELS.map((item) => {
             const Icon = item.icon;
             const on = panel === item.id;
@@ -293,14 +299,20 @@ export function Overlay() {
           })}
         </div>
 
-        <div className="flex items-center justify-between gap-2 px-3 pt-2 sm:hidden">
+        <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 sm:hidden">
           <p className="text-sm font-medium">{PANELS.find((p) => p.id === panel)?.label}</p>
           <button type="button" className="text-xs text-muted" onClick={() => setOpen((v) => !v)}>
             {open ? "收起" : "展开"}
           </button>
         </div>
 
-        <div className={cn("overflow-y-auto p-3 sm:block sm:max-h-[calc(100dvh-12rem)] sm:p-4", open ? "block" : "hidden")}>
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3 sm:block sm:p-4",
+            open ? "block" : "hidden",
+          )}
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {panel === "settings" ? (
             <>
               <div className="mb-3 flex gap-1 overflow-x-auto">
@@ -974,8 +986,37 @@ export function Overlay() {
                 </Slider.Root>
               </label>
               <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                下巴下颌带动下唇、下牙和舌头，上唇轻微上提。
+                下巴下颌带动下唇、下牙和舌头。嘴角、嘟嘴、嘴宽可叠在张嘴上。
               </p>
+              {(
+                [
+                  { label: "嘴角", value: mouthSmile, min: -1, max: 1, set: setMouthSmile },
+                  { label: "嘟嘴", value: mouthPucker, min: 0, max: 1, set: setMouthPucker },
+                  { label: "嘴宽", value: mouthWidth, min: -1, max: 1, set: setMouthWidth },
+                ] as const
+              ).map((item) => (
+                <label key={item.label} className="mt-3 block">
+                  <span className="mb-1.5 flex items-center justify-between text-xs text-muted">
+                    <span>{item.label}</span>
+                    <span className="tabular-nums text-fg">{item.value.toFixed(2)}</span>
+                  </span>
+                  <Slider.Root
+                    value={[item.value]}
+                    min={item.min}
+                    max={item.max}
+                    step={0.01}
+                    onValueChange={([v]) => {
+                      if (typeof v === "number") item.set(v);
+                    }}
+                    className="relative flex h-5 w-full touch-none items-center"
+                  >
+                    <Slider.Track className="relative h-1 grow rounded-full bg-surface-2">
+                      <Slider.Range className="absolute h-full rounded-full bg-accent" />
+                    </Slider.Track>
+                    <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
+                  </Slider.Root>
+                </label>
+              ))}
               <p className="mt-4 mb-1.5 text-xs text-muted">表情</p>
               <div className="grid grid-cols-4 gap-1">
                 {EXPRESSIONS.map((item) => (
