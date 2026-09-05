@@ -1,10 +1,16 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import {
   Activity,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Camera,
   ChevronsUpDown,
   Crosshair,
   Eye,
   EyeOff,
+  GripHorizontal,
   Grid3x3,
   Hand,
   Grab,
@@ -26,13 +32,13 @@ import {
 } from "lucide-react";
 import * as Slider from "@radix-ui/react-slider";
 import { cn } from "@/lib/utils";
-import { PRESETS, useStudio, type PresetId, type StudioParams } from "@/lib/studio-store";
+import { PRESETS, useStudio, type CamFocus, type PresetId, type StudioParams } from "@/lib/studio-store";
 import { EXPRESSIONS, POSES } from "@/lib/softbody/soft-skeleton";
 
 const SLIDERS: {
   id: keyof Pick<
     StudioParams,
-    "stiffness" | "damping" | "gravity" | "pressure" | "jiggle" | "wind" | "breathAmp" | "breathSpeed" | "abdomenXray" | "bellyInflate" | "navelDepth" | "navelDiameter" | "gutAmp" | "gutSpeed" | "breastSoft" | "breastDamp" | "breastInertia" | "hairDamp" | "hairInertia" | "fistBulge" | "fistSpread" | "fistGut" | "fistLever" | "fistMaxDepth" | "fistRise"
+    "stiffness" | "damping" | "gravity" | "pressure" | "jiggle" | "wind" | "breathAmp" | "breathSpeed" | "bellyInflate" | "navelDepth" | "navelDiameter" | "gutAmp" | "gutSpeed" | "breastSoft" | "breastDamp" | "breastInertia" | "hairDamp" | "hairInertia" | "fistBulge" | "fistSpread" | "fistGut" | "fistLever" | "fistMaxDepth" | "fistRise"
   >;
   label: string;
   min: number;
@@ -47,7 +53,6 @@ const SLIDERS: {
   { id: "wind", label: "风力", min: 0, max: 1, step: 0.01 },
   { id: "breathAmp", label: "呼吸幅度", min: 0, max: 1, step: 0.01 },
   { id: "breathSpeed", label: "呼吸速度", min: 0.05, max: 1, step: 0.01 },
-  { id: "abdomenXray", label: "腹部半透明", min: 0, max: 1, step: 0.01 },
   { id: "bellyInflate", label: "彭腹", min: -1, max: 1, step: 0.01 },
   { id: "navelDepth", label: "肚脐深度", min: 0, max: 1, step: 0.01 },
   { id: "navelDiameter", label: "肚脐直径", min: 0, max: 2, step: 0.01 },
@@ -86,6 +91,7 @@ const STRIKE_LEVELS: { id: string; label: string; force: number }[] = [
 export function Overlay() {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<PanelId>("settings");
+  const [camOpen, setCamOpen] = useState(false);
   const preset = useStudio((s) => s.preset);
   const breathing = useStudio((s) => s.breathing);
   const slowMo = useStudio((s) => s.slowMo);
@@ -240,39 +246,35 @@ export function Overlay() {
         </div>
       ) : null}
 
-      <button
-        type="button"
-        onClick={uiHidden ? showUi : hideUi}
-        className="pointer-events-auto absolute top-4 right-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-fg sm:top-6 sm:right-6"
-        aria-label={uiHidden ? "显示菜单" : "隐藏菜单"}
-      >
-        {uiHidden ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-      </button>
+      <div className="pointer-events-auto absolute top-4 right-4 z-20 flex gap-2 sm:top-6 sm:right-6">
+        <button
+          type="button"
+          onClick={() => setCamOpen((v) => !v)}
+          className={cn(
+            "inline-flex h-11 w-11 items-center justify-center rounded-full border transition-colors duration-fast ease-smooth-out",
+            camOpen ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface text-fg",
+          )}
+          aria-label="摄像机"
+        >
+          <Camera className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={uiHidden ? showUi : hideUi}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-fg"
+          aria-label={uiHidden ? "显示菜单" : "隐藏菜单"}
+        >
+          {uiHidden ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+        </button>
+      </div>
+      {camOpen ? <CameraMenu onClose={() => setCamOpen(false)} /> : null}
 
       {uiHidden ? null : (
         <>
-      <header className="pointer-events-none absolute top-0 right-0 left-0 flex items-start justify-between gap-4 p-4 pr-16 sm:p-6 sm:pr-20">
+      <header className="pointer-events-none absolute top-0 right-0 left-0 flex items-start justify-between gap-4 p-4 pr-28 sm:p-6 sm:pr-32">
         <div className="max-w-[16rem]">
           <p className="font-display text-2xl leading-none tracking-display text-fg sm:text-3xl">柔肠模拟器</p>
           <p className="mt-1.5 text-[11px] leading-snug text-muted sm:hidden">双指拖动平移 · 双击后拖动旋转</p>
-        </div>
-        <div className="pointer-events-auto">
-          <button
-            type="button"
-            onClick={() => {
-              const on = abdomenXray > 0.05;
-              setParam("abdomenXray", on ? 0 : 0.38);
-            }}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-smooth-out",
-              abdomenXray > 0.05
-                ? "border-accent bg-accent text-accent-fg"
-                : "border-border bg-surface/80 text-muted hover:text-fg",
-            )}
-          >
-            <Scan className="size-3.5" />
-            透视
-          </button>
         </div>
       </header>
 
@@ -447,12 +449,6 @@ export function Overlay() {
                   onClick={() => setParam("showOrgans", !showOrgans)}
                   icon={<Scan className="size-3.5" />}
                   label="脏器"
-                />
-                <Toggle
-                  active={abdomenXray > 0.05}
-                  onClick={() => setParam("abdomenXray", abdomenXray > 0.05 ? 0 : 0.38)}
-                  icon={<Scan className="size-3.5" />}
-                  label="透视"
                 />
                 <Toggle
                   active={showGutHp}
@@ -1214,6 +1210,229 @@ export function Overlay() {
       </div>
         </>
       )}
+    </div>
+  );
+}
+
+function CameraMenu({ onClose }: { onClose: () => void }) {
+  const live = useStudio((s) => s.cameraLive);
+  const presets = useStudio((s) => s.cameraPresets);
+  const presetIndex = useStudio((s) => s.cameraPresetIndex);
+  const camFocus = useStudio((s) => s.camFocus);
+  const saveCameraPreset = useStudio((s) => s.saveCameraPreset);
+  const applyCameraPreset = useStudio((s) => s.applyCameraPreset);
+  const setCamFocus = useStudio((s) => s.setCamFocus);
+  const setCameraZoom = useStudio((s) => s.setCameraZoom);
+  const panCamera = useStudio((s) => s.panCamera);
+  const abdomenXray = useStudio((s) => s.abdomenXray);
+  const setParam = useStudio((s) => s.setParam);
+  const dist = Math.hypot(live.px - live.tx, live.py - live.ty, live.pz - live.tz);
+  const focuses: { id: CamFocus; label: string }[] = [
+    { id: "face", label: "面部" },
+    { id: "chest", label: "胸部" },
+    { id: "belly", label: "腹部" },
+    { id: "groin", label: "阴部" },
+  ];
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ px: number; py: number; x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  const onDragStart = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = panelRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    dragRef.current = { px: e.clientX, py: e.clientY, x: r.left, y: r.top };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onDragMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if ((e.buttons & 1) === 0) {
+      dragRef.current = null;
+      return;
+    }
+    const el = panelRef.current;
+    const w = el?.offsetWidth ?? 256;
+    const h = el?.offsetHeight ?? 240;
+    const x = Math.max(8, Math.min(window.innerWidth - w - 8, d.x + e.clientX - d.px));
+    const y = Math.max(8, Math.min(window.innerHeight - Math.min(h, 80) - 8, d.y + e.clientY - d.py));
+    setPos({ x, y });
+  };
+  const onDragEnd = (e: PointerEvent<HTMLDivElement>) => {
+    dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const pad =
+    "inline-flex size-9 items-center justify-center rounded-md border border-border/40 bg-surface/30 text-muted hover:bg-surface/55 hover:text-fg";
+
+  return (
+    <div
+      ref={panelRef}
+      className={cn(
+        "pointer-events-auto absolute z-30 flex max-h-[calc(100dvh-5rem)] w-64 flex-col overflow-hidden rounded-xl border border-border/40 bg-surface/40 backdrop-blur-[2px]",
+        pos ? "" : "top-16 right-4 sm:top-6 sm:right-28",
+      )}
+      style={pos ? { left: pos.x, top: pos.y, right: "auto" } : undefined}
+    >
+      <div
+        className="flex shrink-0 cursor-grab items-center justify-between border-b border-border/40 px-3 py-1.5 active:cursor-grabbing"
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+      >
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+          <GripHorizontal className="size-3.5 text-muted" />
+          摄像机
+        </span>
+        <button type="button" className="text-xs text-muted hover:text-fg" onClick={onClose}>
+          关闭
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3" style={{ WebkitOverflowScrolling: "touch" }}>
+        <p className="mb-1.5 text-xs text-muted">视角预设</p>
+        <div className="flex flex-col gap-1">
+          {presets.map((snap, i) => (
+            <div key={i} className="flex gap-1">
+              <button
+                type="button"
+                disabled={!snap}
+                onClick={() => applyCameraPreset(i)}
+                className={cn(
+                  "h-8 flex-1 rounded-md border text-[11px] font-medium",
+                  presetIndex === i
+                    ? "border-accent bg-accent/80 text-accent-fg"
+                    : snap
+                      ? "border-border/40 bg-surface/30 text-fg"
+                      : "border-border/40 bg-surface/20 text-muted",
+                )}
+              >
+                预设{i + 1}
+                {snap ? "" : " · 空"}
+              </button>
+              <button
+                type="button"
+                onClick={() => saveCameraPreset(i)}
+                className="h-8 shrink-0 rounded-md border border-border/40 bg-surface/30 px-2.5 text-[11px] font-medium text-muted hover:text-fg"
+              >
+                保存
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-3 mb-1.5 text-xs text-muted">视觉中心</p>
+        <div className="grid grid-cols-4 gap-1">
+          {focuses.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setCamFocus(item.id)}
+              className={cn(
+                "h-8 rounded-md border text-[11px] font-medium",
+                camFocus === item.id
+                  ? "border-accent bg-accent/80 text-accent-fg"
+                  : "border-border/40 bg-surface/30 text-muted hover:text-fg",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-3 mb-1.5 text-xs text-muted">摄像机控制</p>
+        <label className="block">
+          <span className="mb-1.5 flex items-center justify-between text-xs text-muted">
+            <span>缩放</span>
+            <span className="tabular-nums text-fg">{dist.toFixed(2)}</span>
+          </span>
+          <Slider.Root
+            value={[dist]}
+            min={0.12}
+            max={4}
+            step={0.01}
+            onValueChange={([v]) => {
+              if (typeof v === "number") setCameraZoom(v);
+            }}
+            className="relative flex h-5 w-full touch-none items-center"
+          >
+            <Slider.Track className="relative h-1 grow rounded-full bg-surface-2/50">
+              <Slider.Range className="absolute h-full rounded-full bg-accent" />
+            </Slider.Track>
+            <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
+          </Slider.Root>
+        </label>
+        <div className="mt-3 flex items-center justify-center gap-4">
+          <div className="grid grid-cols-3 gap-1">
+            <span className="size-9" />
+            <button type="button" aria-label="上" className={pad} onClick={() => panCamera(0, 0.08, 0)}>
+              <ArrowUp className="size-4" />
+            </button>
+            <span className="size-9" />
+            <button type="button" aria-label="左" className={pad} onClick={() => panCamera(-0.08, 0, 0)}>
+              <ArrowLeft className="size-4" />
+            </button>
+            <span className="size-9" />
+            <button type="button" aria-label="右" className={pad} onClick={() => panCamera(0.08, 0, 0)}>
+              <ArrowRight className="size-4" />
+            </button>
+            <span className="size-9" />
+            <button type="button" aria-label="下" className={pad} onClick={() => panCamera(0, -0.08, 0)}>
+              <ArrowDown className="size-4" />
+            </button>
+            <span className="size-9" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <button type="button" className={cn(pad, "w-10 text-[11px]")} onClick={() => panCamera(0, 0, 0.08)}>
+              前
+            </button>
+            <button type="button" className={cn(pad, "w-10 text-[11px]")} onClick={() => panCamera(0, 0, -0.08)}>
+              后
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 mb-1.5 text-xs text-muted">透视</p>
+        <button
+          type="button"
+          onClick={() => setParam("abdomenXray", abdomenXray > 0.05 ? 0 : 0.38)}
+          className={cn(
+            "mb-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border text-[11px] font-medium",
+            abdomenXray > 0.05
+              ? "border-accent bg-accent/80 text-accent-fg"
+              : "border-border/40 bg-surface/30 text-muted hover:text-fg",
+          )}
+        >
+          <Scan className="size-3.5" />
+          {abdomenXray > 0.05 ? "透视开" : "透视关"}
+        </button>
+        <label className="block">
+          <span className="mb-1.5 flex items-center justify-between text-xs text-muted">
+            <span>腹部半透明</span>
+            <span className="tabular-nums text-fg">{abdomenXray.toFixed(2)}</span>
+          </span>
+          <Slider.Root
+            value={[abdomenXray]}
+            min={0}
+            max={1}
+            step={0.01}
+            onValueChange={([v]) => {
+              if (typeof v === "number") setParam("abdomenXray", v);
+            }}
+            className="relative flex h-5 w-full touch-none items-center"
+          >
+            <Slider.Track className="relative h-1 grow rounded-full bg-surface-2/50">
+              <Slider.Range className="absolute h-full rounded-full bg-accent" />
+            </Slider.Track>
+            <Slider.Thumb className="block size-3.5 rounded-full bg-fg shadow-sm outline-none ring-2 ring-transparent focus-visible:ring-accent" />
+          </Slider.Root>
+        </label>
+      </div>
     </div>
   );
 }

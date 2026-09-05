@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Figure } from "./figure";
-import { useStudio } from "@/lib/studio-store";
+import { useStudio, type CamFocus } from "@/lib/studio-store";
 
 export default function Scene({
   character,
@@ -60,6 +60,7 @@ export default function Scene({
             bayonetLong={bayonetLong}
           />
           <ControlsBridge controlsRef={controlsRef} />
+          <CameraRig controlsRef={controlsRef} />
         </Suspense>
       </Canvas>
     </div>
@@ -387,6 +388,85 @@ function ControlsBridge({
       }}
     />
   );
+}
+
+const CAM_FOCUS: Record<CamFocus, { x: number; y: number; z: number; dist: number }> = {
+  face: { x: 0, y: 1.54, z: 0.11, dist: 0.72 },
+  chest: { x: 0, y: 1.27, z: 0.13, dist: 0.88 },
+  belly: { x: 0, y: 1.06, z: 0.1, dist: 1.08 },
+  groin: { x: 0, y: 0.91, z: 0.08, dist: 0.92 },
+};
+
+function CameraRig({
+  controlsRef,
+}: {
+  controlsRef: RefObject<OrbitControlsImpl | null>;
+}) {
+  const { camera } = useThree();
+  const cmd = useStudio((s) => s.camCmd);
+
+  useEffect(() => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const writeLive = () => {
+      useStudio.getState().setCameraLive({
+        px: camera.position.x,
+        py: camera.position.y,
+        pz: camera.position.z,
+        tx: c.target.x,
+        ty: c.target.y,
+        tz: c.target.z,
+      });
+    };
+    c.addEventListener("change", writeLive);
+    writeLive();
+    return () => c.removeEventListener("change", writeLive);
+  }, [camera, controlsRef]);
+
+  useEffect(() => {
+    if (!cmd) return;
+    const c = controlsRef.current;
+    if (!c) return;
+    const offset = new THREE.Vector3();
+    if (cmd.kind === "snap") {
+      camera.position.set(cmd.snap.px, cmd.snap.py, cmd.snap.pz);
+      c.target.set(cmd.snap.tx, cmd.snap.ty, cmd.snap.tz);
+    } else if (cmd.kind === "focus") {
+      const f = CAM_FOCUS[cmd.focus];
+      offset.copy(camera.position).sub(c.target);
+      if (offset.lengthSq() < 1e-6) offset.set(0, 0, 1);
+      offset.setLength(f.dist);
+      c.target.set(f.x, f.y, f.z);
+      camera.position.copy(c.target).add(offset);
+    } else if (cmd.kind === "zoom") {
+      offset.copy(camera.position).sub(c.target);
+      if (offset.lengthSq() < 1e-6) offset.set(0, 0, 1);
+      offset.setLength(cmd.dist);
+      camera.position.copy(c.target).add(offset);
+    } else if (cmd.kind === "pan") {
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+      const fwd = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 2).multiplyScalar(-1);
+      const delta = new THREE.Vector3()
+        .addScaledVector(right, cmd.dx)
+        .addScaledVector(up, cmd.dy)
+        .addScaledVector(fwd, cmd.dz);
+      c.target.add(delta);
+      camera.position.add(delta);
+    }
+    camera.lookAt(c.target);
+    c.update();
+    useStudio.getState().setCameraLive({
+      px: camera.position.x,
+      py: camera.position.y,
+      pz: camera.position.z,
+      tx: c.target.x,
+      ty: c.target.y,
+      tz: c.target.z,
+    });
+  }, [cmd, camera, controlsRef]);
+
+  return null;
 }
 
 function StudioLights() {

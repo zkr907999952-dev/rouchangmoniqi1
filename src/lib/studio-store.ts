@@ -7,6 +7,23 @@ export type PoseEditMode = "ik" | "rotate" | "move";
 export type BayonetKind = "short" | "long";
 export type BedStance = "front" | "on" | "lie";
 
+export type CamSnap = {
+  px: number;
+  py: number;
+  pz: number;
+  tx: number;
+  ty: number;
+  tz: number;
+};
+
+export type CamFocus = "face" | "chest" | "belly" | "groin";
+
+export type CamCmd =
+  | { nonce: number; kind: "snap"; snap: CamSnap }
+  | { nonce: number; kind: "focus"; focus: CamFocus }
+  | { nonce: number; kind: "zoom"; dist: number }
+  | { nonce: number; kind: "pan"; dx: number; dy: number; dz: number };
+
 export type StudioParams = {
   stiffness: number;
   damping: number;
@@ -284,6 +301,11 @@ type StudioState = StudioParams & {
   mouthSmile: number;
   mouthPucker: number;
   mouthWidth: number;
+  cameraLive: CamSnap;
+  cameraPresets: (CamSnap | null)[];
+  cameraPresetIndex: number | null;
+  camFocus: CamFocus | null;
+  camCmd: CamCmd | null;
   setParam: <K extends keyof StudioParams>(key: K, value: StudioParams[K]) => void;
   applyPreset: (id: PresetId) => void;
   setInteractMode: (mode: InteractMode) => void;
@@ -311,6 +333,12 @@ type StudioState = StudioParams & {
   setMouthSmile: (v: number) => void;
   setMouthPucker: (v: number) => void;
   setMouthWidth: (v: number) => void;
+  setCameraLive: (snap: CamSnap) => void;
+  saveCameraPreset: (i: number) => void;
+  applyCameraPreset: (i: number) => void;
+  setCamFocus: (focus: CamFocus) => void;
+  setCameraZoom: (dist: number) => void;
+  panCamera: (dx: number, dy: number, dz: number) => void;
   shake: () => void;
   fireStrike: (point?: [number, number, number] | null) => void;
   resetSim: () => void;
@@ -355,6 +383,11 @@ export const useStudio = create<StudioState>((set) => ({
   mouthSmile: 0,
   mouthPucker: 0,
   mouthWidth: 0,
+  cameraLive: { px: 0.28, py: 1.18, pz: 2.35, tx: 0, ty: 1.06, tz: 0.1 },
+  cameraPresets: [null, null, null, null],
+  cameraPresetIndex: null,
+  camFocus: null,
+  camCmd: null,
   setParam: (key, value) =>
     set((s) => ({
       ...s,
@@ -432,6 +465,42 @@ export const useStudio = create<StudioState>((set) => ({
   setMouthSmile: (mouthSmile) => set({ mouthSmile: Math.max(-1, Math.min(1, mouthSmile)) }),
   setMouthPucker: (mouthPucker) => set({ mouthPucker: Math.max(0, Math.min(1, mouthPucker)) }),
   setMouthWidth: (mouthWidth) => set({ mouthWidth: Math.max(-1, Math.min(1, mouthWidth)) }),
+  setCameraLive: (cameraLive) => set({ cameraLive }),
+  saveCameraPreset: (i) =>
+    set((s) => {
+      if (i < 0 || i > 3) return s;
+      const next = s.cameraPresets.slice() as (CamSnap | null)[];
+      next[i] = { ...s.cameraLive };
+      return { cameraPresets: next, cameraPresetIndex: i };
+    }),
+  applyCameraPreset: (i) =>
+    set((s) => {
+      const snap = s.cameraPresets[i];
+      if (!snap) return s;
+      return {
+        cameraPresetIndex: i,
+        camFocus: null,
+        camCmd: { nonce: (s.camCmd?.nonce ?? 0) + 1, kind: "snap", snap },
+      };
+    }),
+  setCamFocus: (focus) =>
+    set((s) => ({
+      camFocus: focus,
+      cameraPresetIndex: null,
+      camCmd: { nonce: (s.camCmd?.nonce ?? 0) + 1, kind: "focus", focus },
+    })),
+  setCameraZoom: (dist) =>
+    set((s) => ({
+      camCmd: {
+        nonce: (s.camCmd?.nonce ?? 0) + 1,
+        kind: "zoom",
+        dist: Math.max(0.12, Math.min(6.2, dist)),
+      },
+    })),
+  panCamera: (dx, dy, dz) =>
+    set((s) => ({
+      camCmd: { nonce: (s.camCmd?.nonce ?? 0) + 1, kind: "pan", dx, dy, dz },
+    })),
   shake: () => set((s) => ({ shakeNonce: s.shakeNonce + 1 })),
   fireStrike: (point = null) =>
     set((s) => ({ strikeNonce: s.strikeNonce + 1, strikePoint: point ?? null })),
