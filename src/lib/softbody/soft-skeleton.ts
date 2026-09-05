@@ -208,8 +208,8 @@ export class SoftSkeleton {
   private blinkSpeed = 1;
   private mouthOpen = 0;
   private mouthU = 0;
-  private mouthAmpU = 1;
-  private mouthChinAmpU = 1;
+  private mouthAmpU = 0.73;
+  private mouthChinAmpU = 0.46;
   private mouthLipAmpU = 1;
   private mouthSmileU = 0;
   private mouthPuckerU = 0;
