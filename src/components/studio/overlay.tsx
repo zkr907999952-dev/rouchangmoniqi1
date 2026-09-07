@@ -33,7 +33,7 @@ import {
 import * as Slider from "@radix-ui/react-slider";
 import { cn } from "@/lib/utils";
 import { PRESETS, useStudio, type CamFocus, type PresetId, type StudioParams } from "@/lib/studio-store";
-import { EXPRESSIONS, POSES } from "@/lib/softbody/soft-skeleton";
+import { EXPRESSIONS, HAND_GESTURES, POSES } from "@/lib/softbody/soft-skeleton";
 
 const SLIDERS: {
   id: keyof Pick<
@@ -101,6 +101,11 @@ export function Overlay() {
   const pose = useStudio((s) => s.pose);
   const setExpression = useStudio((s) => s.setExpression);
   const setPose = useStudio((s) => s.setPose);
+  const handSide = useStudio((s) => s.handSide);
+  const setHandSide = useStudio((s) => s.setHandSide);
+  const handGestureL = useStudio((s) => s.handGestureL);
+  const handGestureR = useStudio((s) => s.handGestureR);
+  const setHandGesture = useStudio((s) => s.setHandGesture);
   const autoRotate = useStudio((s) => s.autoRotate);
   const showOrgans = useStudio((s) => s.showOrgans);
   const showGutHp = useStudio((s) => s.showGutHp);
@@ -1084,6 +1089,52 @@ export function Overlay() {
                   </button>
                 ))}
               </div>
+              <p className="mt-3 mb-1.5 text-xs text-muted">手势</p>
+              <div className="grid grid-cols-2 gap-1">
+                {(
+                  [
+                    { id: "L" as const, label: "左手" },
+                    { id: "R" as const, label: "右手" },
+                  ] as const
+                ).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setHandSide(item.id)}
+                    className={cn(
+                      "h-9 rounded-md border text-[11px] font-medium",
+                      handSide === item.id
+                        ? "border-accent bg-accent text-accent-fg"
+                        : "border-border bg-surface-2 text-muted hover:text-fg",
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-1.5 grid grid-cols-3 gap-1">
+                {HAND_GESTURES.map((item) => {
+                  const current = handSide === "L" ? handGestureL : handGestureR;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setHandGesture(item.id)}
+                      className={cn(
+                        "h-9 rounded-md border px-1 text-[11px] font-medium",
+                        current === item.id
+                          ? "border-accent bg-accent text-accent-fg"
+                          : "border-border bg-surface-2 text-muted hover:text-fg",
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                先选左右手，再选手势。两只手可分别设定。
+              </p>
             </>
           ) : null}
 

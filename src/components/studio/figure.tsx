@@ -1185,6 +1185,8 @@ function FittedFigure({
   const bonesRef = useRef<THREE.LineSegments>(null);
   const exprRef = useRef(useStudio.getState().expression);
   const poseRef = useRef(useStudio.getState().pose);
+  const gestLRef = useRef(useStudio.getState().handGestureL);
+  const gestRRef = useRef(useStudio.getState().handGestureR);
   const grab = useRef<{
     active: boolean;
     mode: "pose" | "drag" | "fist" | "bayonet";
@@ -1664,6 +1666,14 @@ function FittedFigure({
     if (s.pose !== poseRef.current) {
       poseRef.current = s.pose;
       setup.skeleton.setPose(s.pose);
+    }
+    if (s.handGestureL !== gestLRef.current) {
+      gestLRef.current = s.handGestureL;
+      setup.skeleton.setHandGesture("L", s.handGestureL);
+    }
+    if (s.handGestureR !== gestRRef.current) {
+      gestRRef.current = s.handGestureR;
+      setup.skeleton.setHandGesture("R", s.handGestureR);
     }
 
     const ctrl = controlsRef.current;

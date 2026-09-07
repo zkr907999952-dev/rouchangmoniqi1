@@ -46,6 +46,8 @@ export type SkelParams = {
 
 export type ExpressionId = "rest" | "smile" | "surprise" | "open";
 export type PoseId = "idle" | "armsUp" | "bow" | "legLift" | "twist" | "sway";
+export type HandGesture = "rest" | "fist" | "point" | "two" | "peace" | "middle";
+export type HandSide = "L" | "R";
 
 export const EXPRESSIONS: { id: ExpressionId; label: string }[] = [
   { id: "rest", label: "平静" },
@@ -61,6 +63,15 @@ export const POSES: { id: PoseId; label: string }[] = [
   { id: "legLift", label: "抬腿" },
   { id: "twist", label: "扭腰" },
   { id: "sway", label: "摇摆" },
+];
+
+export const HAND_GESTURES: { id: HandGesture; label: string }[] = [
+  { id: "rest", label: "正常" },
+  { id: "fist", label: "握拳" },
+  { id: "point", label: "伸出食指" },
+  { id: "two", label: "伸出两指" },
+  { id: "peace", label: "剪刀手" },
+  { id: "middle", label: "竖中指" },
 ];
 
 export type SkinBinding = {
@@ -154,6 +165,8 @@ export class SoftSkeleton {
   energy = 0;
   expression: ExpressionId = "rest";
   pose: PoseId = "idle";
+  gestureL: HandGesture = "rest";
+  gestureR: HandGesture = "rest";
 
   private readonly q: THREE.Quaternion[] = [];
   private readonly qv: THREE.Vector3[] = [];
@@ -163,6 +176,11 @@ export class SoftSkeleton {
   private readonly poseOff: THREE.Vector3[] = [];
   private readonly exprQ: THREE.Quaternion[] = [];
   private readonly exprOff: THREE.Vector3[] = [];
+  private readonly handQ: THREE.Quaternion[] = [];
+  private readonly handKind: Int8Array;
+  private readonly handCurlAx: Float32Array;
+  private readonly handPalmAx: Float32Array;
+  private readonly handOppAx: Float32Array;
   private readonly off: THREE.Vector3[] = [];
   private hold: Hold | null = null;
   private dents: { x: number; y: number; z: number; t: number; force: number; range: number }[] = [];
@@ -289,6 +307,7 @@ export class SoftSkeleton {
       this.poseOff.push(new THREE.Vector3());
       this.exprQ.push(new THREE.Quaternion());
       this.exprOff.push(new THREE.Vector3());
+      this.handQ.push(new THREE.Quaternion());
     }
     const neckI = this.byName["C_Neck_a"];
     this.neckY = neckI !== undefined ? this.rest[neckI * 3 + 1]! : this.headY - 0.08;
@@ -299,6 +318,11 @@ export class SoftSkeleton {
     this.iEyeR = this.byName["R_Eye"] ?? -1;
     this.iFace = this.byName["C_FaceBase_a"] ?? this.iHead;
     this.iChin = this.byName["C_Chin"] ?? -1;
+    this.handKind = new Int8Array(this.count);
+    this.handCurlAx = new Float32Array(this.count * 3);
+    this.handPalmAx = new Float32Array(this.count * 3);
+    this.handOppAx = new Float32Array(this.count * 3);
+    this.initHandAxes();
     this.jawKind = new Int8Array(this.count);
     this.jawDy = new Float32Array(this.count);
     this.jawDz = new Float32Array(this.count);
@@ -1209,6 +1233,178 @@ export class SoftSkeleton {
     }
   }
 
+  private initHandAxes() {
+    const childOf = new Int16Array(this.count);
+    childOf.fill(-1);
+    for (let i = 0; i < this.count; i++) {
+      const p = this.parent[i]!;
+      if (p >= 0 && childOf[p] < 0) childOf[p] = i;
+    }
+    for (const side of ["L", "R"] as const) {
+      const iHand = this.byName[`${side}_Hand_a`];
+      const iIdx = this.byName[`${side}_Index_a`];
+      const iPnk = this.byName[`${side}_Pinky_a`];
+      const iMid = this.byName[`${side}_Middle_a`];
+      if (iHand === undefined || iIdx === undefined || iPnk === undefined || iMid === undefined) continue;
+      _from.set(
+        this.rest[iMid * 3]! - this.rest[iHand * 3]!,
+        this.rest[iMid * 3 + 1]! - this.rest[iHand * 3 + 1]!,
+        this.rest[iMid * 3 + 2]! - this.rest[iHand * 3 + 2]!,
+      );
+      if (_from.lengthSq() < 1e-8) continue;
+      _from.normalize();
+      const fx = _from.x;
+      const fy = _from.y;
+      const fz = _from.z;
+      _to.set(
+        this.rest[iIdx * 3]! - this.rest[iPnk * 3]!,
+        this.rest[iIdx * 3 + 1]! - this.rest[iPnk * 3 + 1]!,
+        this.rest[iIdx * 3 + 2]! - this.rest[iPnk * 3 + 2]!,
+      );
+      _v.copy(_from).cross(_to);
+      if (_v.lengthSq() < 1e-8) continue;
+      _v.normalize();
+      if ((side === "L" && _v.x > 0) || (side === "R" && _v.x < 0)) _v.negate();
+      const px = _v.x;
+      const py = _v.y;
+      const pz = _v.z;
+      const digits = ["Thumb", "Index", "Middle", "Ring", "Pinky"] as const;
+      const joints = ["a", "b", "c"] as const;
+      for (const d of digits) {
+        for (const j of joints) {
+          const i = this.byName[`${side}_${d}_${j}`];
+          if (i === undefined) continue;
+          const c = childOf[i]!;
+          if (c >= 0) {
+            _v.set(
+              this.rest[c * 3]! - this.rest[i * 3]!,
+              this.rest[c * 3 + 1]! - this.rest[i * 3 + 1]!,
+              this.rest[c * 3 + 2]! - this.rest[i * 3 + 2]!,
+            );
+          } else {
+            const p = this.parent[i]!;
+            if (p < 0) continue;
+            _v.set(
+              this.rest[i * 3]! - this.rest[p * 3]!,
+              this.rest[i * 3 + 1]! - this.rest[p * 3 + 1]!,
+              this.rest[i * 3 + 2]! - this.rest[p * 3 + 2]!,
+            );
+          }
+          if (_v.lengthSq() < 1e-8) continue;
+          _v.normalize();
+          _from.set(px, py, pz);
+          _to.copy(_v).cross(_from);
+          if (_to.lengthSq() < 1e-10) continue;
+          _to.normalize();
+          this.handKind[i] = d === "Thumb" ? 2 : 1;
+          this.maxAng[i] = Math.max(this.maxAng[i]!, 2.4);
+          this.handCurlAx[i * 3] = _to.x;
+          this.handCurlAx[i * 3 + 1] = _to.y;
+          this.handCurlAx[i * 3 + 2] = _to.z;
+          this.handPalmAx[i * 3] = px;
+          this.handPalmAx[i * 3 + 1] = py;
+          this.handPalmAx[i * 3 + 2] = pz;
+          this.handOppAx[i * 3] = fx;
+          this.handOppAx[i * 3 + 1] = fy;
+          this.handOppAx[i * 3 + 2] = fz;
+        }
+      }
+    }
+  }
+
+  setHandGesture(side: HandSide, id: HandGesture) {
+    if (side === "L") this.gestureL = id;
+    else this.gestureR = id;
+    for (let i = 0; i < this.count; i++) {
+      if (this.handKind[i] && this.names[i]!.startsWith(`${side}_`)) this.handQ[i]!.identity();
+    }
+    const table: Record<
+      HandGesture,
+      {
+        Index: number;
+        Middle: number;
+        Ring: number;
+        Pinky: number;
+        spread: number;
+        tA: number;
+        tB: number;
+        tC: number;
+        opp: number;
+      }
+    > = {
+      rest: { Index: 0, Middle: 0, Ring: 0, Pinky: 0, spread: 0, tA: 0, tB: 0, tC: 0, opp: 0 },
+      fist: { Index: 1, Middle: 1, Ring: 1.05, Pinky: 1.1, spread: 0.04, tA: 0.28, tB: 1.05, tC: 0.82, opp: 0.32 },
+      point: { Index: 0, Middle: 1, Ring: 1.05, Pinky: 1.1, spread: 0.02, tA: 0.18, tB: 0.62, tC: 0.48, opp: 0.22 },
+      two: { Index: 0, Middle: 0, Ring: 1.05, Pinky: 1.1, spread: -0.05, tA: 0.18, tB: 0.58, tC: 0.46, opp: 0.2 },
+      peace: { Index: 0, Middle: 0, Ring: 1.05, Pinky: 1.1, spread: 0.36, tA: 0.2, tB: 0.55, tC: 0.42, opp: 0.18 },
+      middle: { Index: 1.06, Middle: 0, Ring: 1.06, Pinky: 1.1, spread: 0.04, tA: 0.2, tB: 0.64, tC: 0.5, opp: 0.24 },
+    };
+    const g = table[id];
+    const fingers = ["Index", "Middle", "Ring", "Pinky"] as const;
+    for (const d of fingers) {
+      const curl = g[d];
+      const spread = d === "Index" ? g.spread : d === "Middle" ? -g.spread * 0.9 : d === "Pinky" ? -g.spread * 0.12 : 0;
+      const joints: { letter: "a" | "b" | "c"; flex: number; spread: number }[] = [
+        { letter: "a", flex: curl === 0 ? 0.1 : 1.32 * curl, spread },
+        { letter: "b", flex: curl === 0 ? 0.14 : 1.62 * curl, spread: spread * 0.1 },
+        { letter: "c", flex: curl === 0 ? 0.08 : 1.18 * curl, spread: 0 },
+      ];
+      for (const j of joints) {
+        const i = this.byName[`${side}_${d}_${j.letter}`];
+        if (i === undefined || !this.handKind[i]) continue;
+        this.handQ[i]!.identity();
+        if (Math.abs(j.flex) > 0.001) {
+          _from.set(this.handCurlAx[i * 3]!, this.handCurlAx[i * 3 + 1]!, this.handCurlAx[i * 3 + 2]!);
+          _q.setFromAxisAngle(_from, j.flex);
+          this.handQ[i]!.multiply(_q);
+        }
+        if (Math.abs(j.spread) > 0.001) {
+          _from.set(this.handPalmAx[i * 3]!, this.handPalmAx[i * 3 + 1]!, this.handPalmAx[i * 3 + 2]!);
+          _q.setFromAxisAngle(_from, j.spread);
+          this.handQ[i]!.multiply(_q);
+        }
+      }
+    }
+    const iThA = this.byName[`${side}_Thumb_a`];
+    const iThB = this.byName[`${side}_Thumb_b`];
+    const iThC = this.byName[`${side}_Thumb_c`];
+    const iHand = this.byName[`${side}_Hand_a`];
+    const iMid = this.byName[`${side}_Middle_a`];
+    if (iThA === undefined || iThB === undefined || iThC === undefined || iHand === undefined || iMid === undefined) return;
+    const amounts: Record<HandGesture, { flip: number; a: [number, number, number]; b: [number, number, number]; c: [number, number, number] }> = {
+      rest: { flip: 0, a: [0, 0, 0], b: [0, 0, 0], c: [0, 0, 0] },
+      fist: { flip: 0.7, a: [-0.4, 0.12, 0], b: [0.92, 0, 0], c: [0.58, 0, 0] },
+      point: { flip: 0.68, a: [-0.28, 0.24, 0.1], b: [0.82, 0.08, 0], c: [0.66, 0, 0] },
+      two: { flip: 0.65, a: [-0.26, 0.22, 0.1], b: [0.8, 0.08, 0], c: [0.64, 0, 0] },
+      peace: { flip: 0.7, a: [-0.3, 0.2, 0.08], b: [0.8, 0.06, 0], c: [0.64, 0, 0] },
+      middle: { flip: 0.68, a: [-0.28, 0.26, 0.1], b: [0.84, 0.08, 0], c: [0.66, 0, 0] },
+    };
+    const th = amounts[id];
+    const m = side === "R" ? -1 : 1;
+    _from.set(
+      this.rest[iMid * 3]! - this.rest[iHand * 3]!,
+      this.rest[iMid * 3 + 1]! - this.rest[iHand * 3 + 1]!,
+      this.rest[iMid * 3 + 2]! - this.rest[iHand * 3 + 2]!,
+    );
+    if (_from.lengthSq() > 1e-10) _from.normalize();
+    const apply = (i: number, e: [number, number, number], flip: number) => {
+      this.handKind[i] = 2;
+      this.maxAng[i] = Math.max(this.maxAng[i]!, 2.2);
+      this.handQ[i]!.identity();
+      if (Math.abs(flip) > 0.001 && _from.lengthSq() > 1e-10) {
+        _q.setFromAxisAngle(_from, flip);
+        this.handQ[i]!.multiply(_q);
+      }
+      if (e[0] !== 0 || e[1] !== 0 || e[2] !== 0) {
+        _q.setFromEuler(_e.set(e[0], m * e[1], m * e[2], "XYZ"));
+        this.handQ[i]!.multiply(_q);
+      }
+    };
+    apply(iThA, th.a, th.flip);
+    apply(iThB, th.b, 0);
+    apply(iThC, th.c, 0);
+  }
+
   reset() {
     for (let i = 0; i < this.count; i++) {
       this.q[i]!.identity();
@@ -1237,6 +1433,8 @@ export class SoftSkeleton {
     this.dents.length = 0;
     this.setPose(this.pose);
     this.setExpression(this.expression);
+    this.setHandGesture("L", this.gestureL);
+    this.setHandGesture("R", this.gestureR);
     this.updateFK();
     this.applyAll();
   }
@@ -1358,6 +1556,12 @@ export class SoftSkeleton {
           _q2.copy(targetQ).multiply(_q);
           targetQ = _q2;
         }
+      }
+      if (!locked && this.handKind[i]) {
+        _q2.copy(targetQ).multiply(this.handQ[i]!);
+        q.slerp(_q2, 1 - Math.exp(-28 * d));
+        qv.set(0, 0, 0);
+        continue;
       }
       if (!locked && (this.gazeEyeBlend > 0.01 || this.gazeNeckBlend > 0.01 || gb > 0.01)) {
         if (i === this.iNeck) {

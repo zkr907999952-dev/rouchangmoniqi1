@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ExpressionId, PoseId } from "@/lib/softbody/soft-skeleton";
+import type { ExpressionId, HandGesture, HandSide, PoseId } from "@/lib/softbody/soft-skeleton";
 
 export type PresetId = "soft" | "firm" | "jelly" | "athletic";
 export type InteractMode = "drag" | "pose" | "strike" | "fist" | "bayonet";
@@ -272,6 +272,9 @@ type StudioState = StudioParams & {
   selectedBoneName: string;
   expression: ExpressionId;
   pose: PoseId;
+  handSide: HandSide;
+  handGestureL: HandGesture;
+  handGestureR: HandGesture;
   energy: number;
   grabbing: boolean;
   shakeNonce: number;
@@ -313,6 +316,8 @@ type StudioState = StudioParams & {
   setSelectedBone: (i: number, name?: string) => void;
   setExpression: (id: ExpressionId) => void;
   setPose: (id: PoseId) => void;
+  setHandSide: (side: HandSide) => void;
+  setHandGesture: (id: HandGesture) => void;
   setEnergy: (v: number) => void;
   setGrabbing: (v: boolean) => void;
   setBayonetHasEntry: (v: boolean) => void;
@@ -354,6 +359,9 @@ export const useStudio = create<StudioState>((set) => ({
   selectedBoneName: "",
   expression: "rest",
   pose: "idle",
+  handSide: "R",
+  handGestureL: "rest",
+  handGestureR: "rest",
   energy: 0,
   grabbing: false,
   shakeNonce: 0,
@@ -435,6 +443,9 @@ export const useStudio = create<StudioState>((set) => ({
       interactMode: s.interactMode,
       expression: s.expression,
       pose: s.pose,
+      handSide: s.handSide,
+      handGestureL: s.handGestureL,
+      handGestureR: s.handGestureR,
     })),
   setInteractMode: (interactMode) =>
     set((s) => ({
@@ -445,6 +456,9 @@ export const useStudio = create<StudioState>((set) => ({
   setSelectedBone: (selectedBone, name) => set({ selectedBone, selectedBoneName: name ?? "" }),
   setExpression: (expression) => set({ expression }),
   setPose: (pose) => set({ pose }),
+  setHandSide: (handSide) => set({ handSide }),
+  setHandGesture: (id) =>
+    set((s) => (s.handSide === "L" ? { handGestureL: id } : { handGestureR: id })),
   setEnergy: (energy) => set({ energy }),
   setGrabbing: (grabbing) => set({ grabbing }),
   setBayonetHasEntry: (bayonetHasEntry) => set({ bayonetHasEntry }),
